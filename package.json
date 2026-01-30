@@ -1,0 +1,123 @@
+{
+  "name": "mcp-ssh-tool",
+  "version": "1.2.5",
+  "description": "Model Context Protocol (MCP) SSH client server for remote automation",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": "./dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "mcp.json",
+    "README.md",
+    "LICENSE",
+    "REGISTRY_SUBMISSION.md",
+    "registry"
+  ],
+  "bin": {
+    "mcp-ssh-tool": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "tsc --noEmit",
+    "format": "prettier --write src/**/*.ts",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run lint && npm test && npm run build",
+    "e2e": "jest --testPathPattern=e2e",
+    "e2e:docker": "docker-compose up -d ssh-server && npm run e2e",
+    "docs": "npx typedoc --out docs src/index.ts",
+    "setup:chatgpt": "node scripts/setup-chatgpt.js"
+  },
+  "keywords": [
+    "mcp",
+    "ssh",
+    "copilot",
+    "automation",
+    "remote",
+    "model-context-protocol",
+    "github-copilot",
+    "ssh-client",
+    "devops",
+    "infrastructure"
+  ],
+  "author": "Osman Aslan <oaslananka>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oaslananka/mcp-ssh-tool.git"
+  },
+  "homepage": "https://github.com/oaslananka/mcp-ssh-tool#readme",
+  "bugs": {
+    "url": "https://github.com/oaslananka/mcp-ssh-tool/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "commander": "^14.0.2",
+    "node-ssh": "^13.2.1",
+    "ssh2-sftp-client": "^12.0.1",
+    "zod": "^4.3.4"
+  },
+  "devDependencies": {
+    "@jest/globals": "^30.2.0",
+    "@types/node": "^25.0.3",
+    "@types/ssh2-sftp-client": "^9.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.51.0",
+    "@typescript-eslint/parser": "^8.51.0",
+    "eslint": "^9.39.2",
+    "jest": "^30.2.0",
+    "prettier": "^3.7.4",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
+  },
+  "jest": {
+    "preset": "ts-jest/presets/default-esm",
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/test"
+    ],
+    "testMatch": [
+      "**/*.test.ts"
+    ],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "transform": {
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "useESM": true
+        }
+      ]
+    },
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/**/*.d.ts"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 50,
+        "functions": 50,
+        "lines": 50,
+        "statements": 50
+      }
+    }
+  }
+}

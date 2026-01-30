@@ -1,0 +1,115 @@
+import { logger } from './logging.js';
+
+/**
+ * Server configuration options
+ */
+export interface ServerConfig {
+  /** Maximum concurrent sessions */
+  maxSessions: number;
+  /** Default session TTL in milliseconds */
+  sessionTtlMs: number;
+  /** Session cleanup interval in milliseconds */
+  cleanupIntervalMs: number;
+  /** Default command timeout in milliseconds */
+  commandTimeoutMs: number;
+  /** Maximum file size for read operations (bytes) */
+  maxFileSize: number;
+  /** Enable debug logging */
+  debug: boolean;
+  /** Rate limiting configuration */
+  rateLimit: {
+    enabled: boolean;
+    maxRequests: number;
+    windowMs: number;
+  };
+  /** Security settings */
+  security: {
+    allowRootLogin: boolean;
+    requireHostKeyVerification: boolean;
+    allowedCiphers: string[];
+  };
+}
+
+const DEFAULT_CONFIG: ServerConfig = {
+  maxSessions: 20,
+  sessionTtlMs: 900000, // 15 minutes
+  cleanupIntervalMs: 10000, // 10 seconds
+  commandTimeoutMs: 30000, // 30 seconds
+  maxFileSize: 10 * 1024 * 1024, // 10MB
+  debug: false,
+  rateLimit: {
+    enabled: true,
+    maxRequests: 100,
+    windowMs: 60000
+  },
+  security: {
+    allowRootLogin: true,
+    requireHostKeyVerification: false,
+    allowedCiphers: []
+  }
+};
+
+/**
+ * Configuration manager with environment variable overrides
+ */
+export class ConfigManager {
+  private config: ServerConfig;
+
+  constructor(overrides: Partial<ServerConfig> = {}) {
+    this.config = this.loadConfig(overrides);
+    logger.debug('Configuration loaded', { config: this.config });
+  }
+
+  private loadConfig(overrides: Partial<ServerConfig>): ServerConfig {
+    // Start with defaults
+    const config = { ...DEFAULT_CONFIG };
+
+    // Apply environment variable overrides
+    if (process.env.SSH_MCP_MAX_SESSIONS) {
+      config.maxSessions = parseInt(process.env.SSH_MCP_MAX_SESSIONS, 10);
+    }
+    if (process.env.SSH_MCP_SESSION_TTL) {
+      config.sessionTtlMs = parseInt(process.env.SSH_MCP_SESSION_TTL, 10);
+    }
+    if (process.env.SSH_MCP_COMMAND_TIMEOUT) {
+      config.commandTimeoutMs = parseInt(process.env.SSH_MCP_COMMAND_TIMEOUT, 10);
+    }
+    if (process.env.SSH_MCP_DEBUG === 'true') {
+      config.debug = true;
+    }
+    if (process.env.SSH_MCP_RATE_LIMIT === 'false') {
+      config.rateLimit.enabled = false;
+    }
+    if (process.env.SSH_MCP_STRICT_HOST_KEY === 'true') {
+      config.security.requireHostKeyVerification = true;
+    }
+
+    // Apply programmatic overrides last
+    return { ...config, ...overrides };
+  }
+
+  /**
+   * Get a configuration value
+   */
+  get<K extends keyof ServerConfig>(key: K): ServerConfig[K] {
+    return this.config[key];
+  }
+
+  /**
+   * Get the entire configuration
+   */
+  getAll(): Readonly<ServerConfig> {
+    return Object.freeze({ ...this.config });
+  }
+
+  /**
+   * Update configuration at runtime
+   */
+  update(updates: Partial<ServerConfig>): void {
+    this.config = { ...this.config, ...updates };
+    logger.info('Configuration updated', { updates });
+  }
+}
+
+// Global configuration instance
+export const config = new ConfigManager();
