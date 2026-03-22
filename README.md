@@ -1,9 +1,9 @@
 # mcp-ssh-tool
 
+[![LobeHub](https://lobehub.com/badge/mcp/oaslananka-mcp-ssh-tool?style=flat-square)](https://lobehub.com/tr/mcp/oaslananka-mcp-ssh-tool)
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-tool.svg)](https://www.npmjs.com/package/mcp-ssh-tool)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![npm downloads](https://img.shields.io/npm/dm/mcp-ssh-tool.svg)](https://www.npmjs.com/package/mcp-ssh-tool)
-[![license](https://img.shields.io/npm/l/mcp-ssh-tool.svg)](https://github.com/oaslananka/mcp-ssh-tool/blob/main/LICENSE)
-[![LobeHub](https://img.shields.io/badge/LobeHub-MCP%20Server-6D4AFF)](https://lobehub.com/tr/mcp/oaslananka-mcp-ssh-tool)
 
 A Model Context Protocol (MCP) SSH client server that provides autonomous SSH operations for GitHub Copilot and VS Code. Enable natural language SSH automation without manual prompts or GUI interactions.
 
