@@ -30,6 +30,7 @@
     "prepublishOnly": "npm run lint && npm test && npm run build",
     "e2e:docker": "docker-compose up -d ssh-server && npm run test:e2e",
     "docs": "npx typedoc --out docs src/index.ts",
+    "start:http": "node dist/server-http.js",
     "setup:chatgpt": "node scripts/setup-chatgpt.mjs",
     "sync-version": "node scripts/sync-version.mjs",
     "version": "node scripts/sync-version.mjs && git add mcp.json registry/mcp-ssh-tool/mcp.json src/mcp.ts"

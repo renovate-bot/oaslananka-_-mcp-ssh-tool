@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -986,6 +987,10 @@ export class SSHMCPServer {
 
   async run() {
     const transport = new StdioServerTransport();
+    await this.connect(transport);
+  }
+
+  async connect(transport: Transport) {
     await this.server.connect(transport);
     logger.info("SSH MCP Server started successfully");
   }
