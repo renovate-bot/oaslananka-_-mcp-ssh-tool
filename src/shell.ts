@@ -1,4 +1,4 @@
-import { OSInfo } from './types.js';
+import { OSInfo } from "./types.js";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -12,14 +12,14 @@ export function buildPosixCommand(
   command: string,
   cwd?: string,
   env?: Record<string, string>,
-  shellName: 'sh' | 'bash' = 'sh'
+  shellName: "sh" | "bash" = "sh",
 ): string {
   let fullCommand = command;
 
   if (env && Object.keys(env).length > 0) {
     const envVars = Object.entries(env)
       .map(([key, value]) => `${key}=${shellQuote(value)}`)
-      .join(' ');
+      .join(" ");
     fullCommand = `${envVars} ${fullCommand}`;
   }
 
@@ -33,15 +33,16 @@ export function buildPosixCommand(
 export function buildPowerShellCommand(
   command: string,
   cwd?: string,
-  env?: Record<string, string>
+  env?: Record<string, string>,
 ): string {
-  const envPrefix = env && Object.keys(env).length > 0
-    ? Object.entries(env)
-        .map(([key, value]) => `$env:${key} = ${powerShellQuote(value)}`)
-        .join('; ') + '; '
-    : '';
+  const envPrefix =
+    env && Object.keys(env).length > 0
+      ? Object.entries(env)
+          .map(([key, value]) => `$env:${key} = ${powerShellQuote(value)}`)
+          .join("; ") + "; "
+      : "";
 
-  const cwdPrefix = cwd ? `Set-Location -Path ${powerShellQuote(cwd)}; ` : '';
+  const cwdPrefix = cwd ? `Set-Location -Path ${powerShellQuote(cwd)}; ` : "";
   const script = `${envPrefix}${cwdPrefix}${command}`;
 
   return `powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ${powerShellQuote(script)}`;
@@ -51,13 +52,13 @@ export function buildRemoteCommand(
   command: string,
   osInfo: OSInfo,
   cwd?: string,
-  env?: Record<string, string>
+  env?: Record<string, string>,
 ): string {
-  if (osInfo.platform === 'windows') {
+  if (osInfo.platform === "windows") {
     return buildPowerShellCommand(command, cwd, env);
   }
 
-  const shellName = osInfo.defaultShell === 'bash' ? 'bash' : 'sh';
+  const shellName = osInfo.defaultShell === "bash" ? "bash" : "sh";
   return buildPosixCommand(command, cwd, env, shellName);
 }
 
@@ -65,10 +66,10 @@ export function buildSudoCommand(
   command: string,
   osInfo: OSInfo,
   password?: string,
-  cwd?: string
+  cwd?: string,
 ): string {
-  if (osInfo.platform === 'windows') {
-    throw new Error('Sudo is not supported on Windows hosts');
+  if (osInfo.platform === "windows") {
+    throw new Error("Sudo is not supported on Windows hosts");
   }
 
   let sudoCommand = command;
@@ -81,18 +82,18 @@ export function buildSudoCommand(
     ? `echo ${shellQuote(password)} | sudo -S -n ${sudoCommand}`
     : `sudo -n ${sudoCommand}`;
 
-  const shellName = osInfo.defaultShell === 'bash' ? 'bash' : 'sh';
+  const shellName = osInfo.defaultShell === "bash" ? "bash" : "sh";
   return buildPosixCommand(prefixed, undefined, undefined, shellName);
 }
 
 export function resolveRemoteTempDir(osInfo: OSInfo): string {
   if (osInfo.tempDir) {
-    return osInfo.tempDir.replace(/\\\\/g, '/').replace(/\\/g, '/');
+    return osInfo.tempDir.replace(/\\\\/g, "/").replace(/\\/g, "/");
   }
 
-  if (osInfo.platform === 'windows') {
-    return 'C:/Windows/Temp';
+  if (osInfo.platform === "windows") {
+    return "C:/Windows/Temp";
   }
 
-  return '/tmp';
+  return "/tmp";
 }

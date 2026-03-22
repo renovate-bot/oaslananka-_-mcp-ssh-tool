@@ -1,4 +1,4 @@
-import { logger } from './logging.js';
+import { logger } from "./logging.js";
 
 /**
  * Configuration for rate limiter
@@ -35,7 +35,7 @@ export class RateLimiter {
     this.config = {
       maxRequests: config.maxRequests ?? 100,
       windowMs: config.windowMs ?? 60000, // 1 minute
-      blockOnLimit: config.blockOnLimit ?? true
+      blockOnLimit: config.blockOnLimit ?? true,
     };
 
     // Cleanup expired buckets every minute
@@ -55,14 +55,14 @@ export class RateLimiter {
     if (!bucket || now >= bucket.resetAt) {
       this.buckets.set(key, {
         count: 1,
-        resetAt: now + this.config.windowMs
+        resetAt: now + this.config.windowMs,
       });
 
       return {
         allowed: true,
         remaining: this.config.maxRequests - 1,
         resetIn: this.config.windowMs,
-        blocked: false
+        blocked: false,
       };
     }
 
@@ -72,12 +72,16 @@ export class RateLimiter {
     const resetIn = bucket.resetAt - now;
 
     if (newCount > this.config.maxRequests) {
-      logger.warn('Rate limit exceeded', { key, count: newCount, max: this.config.maxRequests });
+      logger.warn("Rate limit exceeded", {
+        key,
+        count: newCount,
+        max: this.config.maxRequests,
+      });
       return {
         allowed: !this.config.blockOnLimit,
         remaining: 0,
         resetIn,
-        blocked: this.config.blockOnLimit
+        blocked: this.config.blockOnLimit,
       };
     }
 
@@ -86,7 +90,7 @@ export class RateLimiter {
       allowed: true,
       remaining,
       resetIn,
-      blocked: false
+      blocked: false,
     };
   }
 
@@ -95,13 +99,15 @@ export class RateLimiter {
    */
   reset(key: string): void {
     this.buckets.delete(key);
-    logger.debug('Rate limit reset', { key });
+    logger.debug("Rate limit reset", { key });
   }
 
   /**
    * Get current usage for a key
    */
-  getUsage(key: string): { count: number; remaining: number; resetIn: number } | null {
+  getUsage(
+    key: string,
+  ): { count: number; remaining: number; resetIn: number } | null {
     const bucket = this.buckets.get(key);
     if (!bucket || Date.now() >= bucket.resetAt) {
       return null;
@@ -110,7 +116,7 @@ export class RateLimiter {
     return {
       count: bucket.count,
       remaining: Math.max(0, this.config.maxRequests - bucket.count),
-      resetIn: bucket.resetAt - Date.now()
+      resetIn: bucket.resetAt - Date.now(),
     };
   }
 
@@ -129,7 +135,7 @@ export class RateLimiter {
     }
 
     if (cleaned > 0) {
-      logger.debug('Rate limiter cleanup', { cleaned });
+      logger.debug("Rate limiter cleanup", { cleaned });
     }
   }
 

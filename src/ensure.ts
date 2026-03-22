@@ -1,10 +1,22 @@
-import { PackageManager, PackageResult, ServiceResult, LinesInFileResult, PatchResult } from './types.js';
-import { createPackageManagerError, createSudoError, createFilesystemError, createPatchError, createBadRequestError } from './errors.js';
-import { logger } from './logging.js';
-import { execCommand, execSudo, commandExists } from './process.js';
-import { readFile, writeFile, pathExists } from './fs-tools.js';
-import { sessionManager } from './session.js';
-import { resolveRemoteTempDir } from './shell.js';
+import {
+  PackageManager,
+  PackageResult,
+  ServiceResult,
+  LinesInFileResult,
+  PatchResult,
+} from "./types.js";
+import {
+  createPackageManagerError,
+  createSudoError,
+  createFilesystemError,
+  createPatchError,
+  createBadRequestError,
+} from "./errors.js";
+import { logger } from "./logging.js";
+import { execCommand, execSudo, commandExists } from "./process.js";
+import { readFile, writeFile, pathExists } from "./fs-tools.js";
+import { sessionManager } from "./session.js";
+import { resolveRemoteTempDir } from "./shell.js";
 
 /**
  * Validates and sanitizes package name to prevent command injection
@@ -17,7 +29,7 @@ function sanitizePackageName(name: string): string {
   if (!VALID_PACKAGE_NAME.test(name)) {
     throw createBadRequestError(
       `Invalid package name: ${name}`,
-      'Package names must start with alphanumeric and contain only letters, numbers, dots, dashes, underscores, or plus signs'
+      "Package names must start with alphanumeric and contain only letters, numbers, dots, dashes, underscores, or plus signs",
     );
   }
 
@@ -25,8 +37,8 @@ function sanitizePackageName(name: string): string {
   const DANGEROUS_CHARS = /[;&|`$(){}\\[\\]<>\\\\\"'\\n\\r]/;
   if (DANGEROUS_CHARS.test(name)) {
     throw createBadRequestError(
-      'Package name contains potentially dangerous characters',
-      'Remove any shell special characters from the package name'
+      "Package name contains potentially dangerous characters",
+      "Remove any shell special characters from the package name",
     );
   }
 
@@ -38,19 +50,19 @@ function sanitizePackageName(name: string): string {
  */
 function getRemoveCommand(pm: PackageManager, packageName: string): string {
   switch (pm) {
-    case 'apt':
+    case "apt":
       return `apt-get remove -y ${packageName}`;
-    case 'dnf':
+    case "dnf":
       return `dnf remove -y ${packageName}`;
-    case 'yum':
+    case "yum":
       return `yum remove -y ${packageName}`;
-    case 'pacman':
+    case "pacman":
       return `pacman -R --noconfirm ${packageName}`;
-    case 'apk':
+    case "apk":
       return `apk del ${packageName}`;
-    case 'zypper':
+    case "zypper":
       return `zypper remove -y ${packageName}`;
-    case 'brew':
+    case "brew":
       return `brew uninstall ${packageName}`;
     default:
       throw createPackageManagerError(`Unsupported package manager: ${pm}`);
@@ -64,11 +76,15 @@ export async function ensurePackage(
   sessionId: string,
   packageName: string,
   sudoPassword?: string,
-  state: 'present' | 'absent' = 'present'
+  state: "present" | "absent" = "present",
 ): Promise<PackageResult> {
   // Validate and sanitize package name to prevent injection
   const safePackageName = sanitizePackageName(packageName);
-  logger.debug('Ensuring package state', { sessionId, packageName: safePackageName, state });
+  logger.debug("Ensuring package state", {
+    sessionId,
+    packageName: safePackageName,
+    state,
+  });
 
   const session = sessionManager.getSession(sessionId);
   if (!session) {
@@ -80,43 +96,55 @@ export async function ensurePackage(
     const osInfo = await sessionManager.getOSInfo(sessionId);
     const pm = osInfo.packageManager;
 
-    if (pm === 'unknown') {
+    if (pm === "unknown") {
       throw createPackageManagerError(
-        'No supported package manager found',
-        'Supported package managers: apt, dnf, yum, pacman, apk, zypper, brew'
+        "No supported package manager found",
+        "Supported package managers: apt, dnf, yum, pacman, apk, zypper, brew",
       );
     }
-    if (osInfo.platform === 'windows') {
+    if (osInfo.platform === "windows") {
       throw createPackageManagerError(
-        'Package management on Windows hosts is not supported by this tool yet',
-        'Use winget/choco manually or install via other Windows package workflows'
+        "Package management on Windows hosts is not supported by this tool yet",
+        "Use winget/choco manually or install via other Windows package workflows",
       );
     }
 
-    logger.debug('Detected package manager', { sessionId, pm });
+    logger.debug("Detected package manager", { sessionId, pm });
 
     // Check if package is installed
-    const isInstalled = await checkPackageInstalled(sessionId, safePackageName, pm);
+    const isInstalled = await checkPackageInstalled(
+      sessionId,
+      safePackageName,
+      pm,
+    );
 
     // Handle absent state (remove package)
-    if (state === 'absent') {
+    if (state === "absent") {
       if (!isInstalled) {
-        logger.info('Package already not installed', { sessionId, packageName: safePackageName });
+        logger.info("Package already not installed", {
+          sessionId,
+          packageName: safePackageName,
+        });
         return {
           ok: true,
           pm,
           code: 0,
           stdout: `Package ${safePackageName} is not installed`,
-          stderr: ''
+          stderr: "",
         };
       }
 
       const removeCommand = getRemoveCommand(pm, safePackageName);
-      logger.debug('Removing package', { sessionId, packageName: safePackageName, command: removeCommand });
+      logger.debug("Removing package", {
+        sessionId,
+        packageName: safePackageName,
+        command: removeCommand,
+      });
 
-      const runRemover = pm === 'brew'
-        ? () => execCommand(sessionId, removeCommand)
-        : () => execSudo(sessionId, removeCommand, sudoPassword);
+      const runRemover =
+        pm === "brew"
+          ? () => execCommand(sessionId, removeCommand)
+          : () => execSudo(sessionId, removeCommand, sudoPassword);
 
       const result = await runRemover();
 
@@ -125,13 +153,20 @@ export async function ensurePackage(
         pm,
         code: result.code,
         stdout: result.stdout,
-        stderr: result.stderr
+        stderr: result.stderr,
       };
 
       if (result.code === 0) {
-        logger.info('Package removed successfully', { sessionId, packageName: safePackageName });
+        logger.info("Package removed successfully", {
+          sessionId,
+          packageName: safePackageName,
+        });
       } else {
-        logger.error('Package removal failed', { sessionId, packageName: safePackageName, code: result.code });
+        logger.error("Package removal failed", {
+          sessionId,
+          packageName: safePackageName,
+          code: result.code,
+        });
       }
 
       return packageResult;
@@ -139,23 +174,31 @@ export async function ensurePackage(
 
     // Handle present state (install package)
     if (isInstalled) {
-      logger.info('Package already installed', { sessionId, packageName: safePackageName });
+      logger.info("Package already installed", {
+        sessionId,
+        packageName: safePackageName,
+      });
       return {
         ok: true,
         pm,
         code: 0,
         stdout: `Package ${safePackageName} is already installed`,
-        stderr: ''
+        stderr: "",
       };
     }
 
     // Install the package using sanitized name
     const installCommand = getInstallCommand(pm, safePackageName);
-    logger.debug('Installing package', { sessionId, packageName: safePackageName, command: installCommand });
+    logger.debug("Installing package", {
+      sessionId,
+      packageName: safePackageName,
+      command: installCommand,
+    });
 
-    const runInstaller = pm === 'brew'
-      ? () => execCommand(sessionId, installCommand)
-      : () => execSudo(sessionId, installCommand, sudoPassword);
+    const runInstaller =
+      pm === "brew"
+        ? () => execCommand(sessionId, installCommand)
+        : () => execSudo(sessionId, installCommand, sudoPassword);
 
     const result = await runInstaller();
 
@@ -164,19 +207,30 @@ export async function ensurePackage(
       pm,
       code: result.code,
       stdout: result.stdout,
-      stderr: result.stderr
+      stderr: result.stderr,
     };
 
     if (result.code === 0) {
-      logger.info('Package installed successfully', { sessionId, packageName: safePackageName });
+      logger.info("Package installed successfully", {
+        sessionId,
+        packageName: safePackageName,
+      });
     } else {
-      logger.error('Package installation failed', { sessionId, packageName: safePackageName, code: result.code });
+      logger.error("Package installation failed", {
+        sessionId,
+        packageName: safePackageName,
+        code: result.code,
+      });
     }
 
     return packageResult;
-
   } catch (error) {
-    logger.error('Failed to ensure package', { sessionId, packageName, state, error });
+    logger.error("Failed to ensure package", {
+      sessionId,
+      packageName,
+      state,
+      error,
+    });
     throw error;
   }
 }
@@ -187,10 +241,10 @@ export async function ensurePackage(
 export async function ensureService(
   sessionId: string,
   serviceName: string,
-  state: 'started' | 'stopped' | 'restarted' | 'enabled' | 'disabled',
-  sudoPassword?: string
+  state: "started" | "stopped" | "restarted" | "enabled" | "disabled",
+  sudoPassword?: string,
 ): Promise<ServiceResult> {
-  logger.debug('Ensuring service state', { sessionId, serviceName, state });
+  logger.debug("Ensuring service state", { sessionId, serviceName, state });
 
   const session = sessionManager.getSession(sessionId);
   if (!session) {
@@ -202,94 +256,106 @@ export async function ensureService(
     const osInfo = await sessionManager.getOSInfo(sessionId);
     const initSystem = osInfo.init;
 
-    if (initSystem === 'launchd') {
+    if (initSystem === "launchd") {
       throw createSudoError(
-        'launchd services are not managed by this tool',
-        'Use launchctl directly on macOS hosts'
+        "launchd services are not managed by this tool",
+        "Use launchctl directly on macOS hosts",
       );
     }
 
-    if (initSystem === 'windows-service') {
+    if (initSystem === "windows-service") {
       throw createSudoError(
-        'Windows services are not managed by this tool',
-        'Use sc.exe or PowerShell to manage Windows services'
+        "Windows services are not managed by this tool",
+        "Use sc.exe or PowerShell to manage Windows services",
       );
     }
 
-    if (initSystem === 'unknown') {
+    if (initSystem === "unknown") {
       throw createSudoError(
-        'No supported init system found',
-        'Supported init systems: systemd, service'
+        "No supported init system found",
+        "Supported init systems: systemd, service",
       );
     }
 
-    logger.debug('Detected init system', { sessionId, initSystem });
+    logger.debug("Detected init system", { sessionId, initSystem });
 
     let command: string;
 
-    if (initSystem === 'systemd') {
+    if (initSystem === "systemd") {
       switch (state) {
-        case 'started':
+        case "started":
           command = `systemctl start ${serviceName}`;
           break;
-        case 'stopped':
+        case "stopped":
           command = `systemctl stop ${serviceName}`;
           break;
-        case 'restarted':
+        case "restarted":
           command = `systemctl restart ${serviceName}`;
           break;
-        case 'enabled':
+        case "enabled":
           command = `systemctl enable ${serviceName}`;
           break;
-        case 'disabled':
+        case "disabled":
           command = `systemctl disable ${serviceName}`;
           break;
       }
     } else {
       // Traditional service command
       switch (state) {
-        case 'started':
+        case "started":
           command = `service ${serviceName} start`;
           break;
-        case 'stopped':
+        case "stopped":
           command = `service ${serviceName} stop`;
           break;
-        case 'restarted':
+        case "restarted":
           command = `service ${serviceName} restart`;
           break;
-        case 'enabled':
+        case "enabled":
           command = `chkconfig ${serviceName} on || update-rc.d ${serviceName} enable`;
           break;
-        case 'disabled':
+        case "disabled":
           command = `chkconfig ${serviceName} off || update-rc.d ${serviceName} disable`;
           break;
       }
     }
 
-    logger.debug('Executing service command', { sessionId, serviceName, command });
+    logger.debug("Executing service command", {
+      sessionId,
+      serviceName,
+      command,
+    });
 
     const result = await execSudo(sessionId, command, sudoPassword);
 
     const serviceResult: ServiceResult = {
-      ok: result.code === 0
+      ok: result.code === 0,
     };
 
     if (result.code === 0) {
-      logger.info('Service state changed successfully', { sessionId, serviceName, state });
+      logger.info("Service state changed successfully", {
+        sessionId,
+        serviceName,
+        state,
+      });
     } else {
-      logger.error('Service state change failed', {
+      logger.error("Service state change failed", {
         sessionId,
         serviceName,
         state,
         code: result.code,
-        stderr: result.stderr
+        stderr: result.stderr,
       });
     }
 
     return serviceResult;
-
   } catch (error) {
-    logger.error('Failed to ensure service state', { sessionId, serviceName, state, error });
+    logger.error("Failed to ensure service state", {
+      sessionId,
+      serviceName,
+      state,
+      error,
+    });
     throw error;
   }
 }
@@ -303,48 +369,58 @@ export async function ensureLinesInFile(
   lines: string[],
   createIfMissing: boolean = true,
   sudoPassword?: string,
-  state: 'present' | 'absent' = 'present'
+  state: "present" | "absent" = "present",
 ): Promise<LinesInFileResult> {
-  logger.debug('Ensuring lines in file', { sessionId, filePath, lineCount: lines.length, state });
+  logger.debug("Ensuring lines in file", {
+    sessionId,
+    filePath,
+    lineCount: lines.length,
+    state,
+  });
 
   try {
     const osInfo = await sessionManager.getOSInfo(sessionId);
-    let fileContent = '';
+    let fileContent = "";
     let fileExists = false;
 
     // Check if file exists and read its content
     if (await pathExists(sessionId, filePath)) {
       fileExists = true;
       fileContent = await readFile(sessionId, filePath);
-    } else if (state === 'absent') {
+    } else if (state === "absent") {
       // File doesn't exist and we want lines absent - nothing to do
-      logger.info('File does not exist, lines already absent', { sessionId, filePath });
+      logger.info("File does not exist, lines already absent", {
+        sessionId,
+        filePath,
+      });
       return {
         ok: true,
-        added: 0
+        added: 0,
       };
     } else if (!createIfMissing) {
       throw createFilesystemError(
-        `File ${filePath} does not exist and createIfMissing is false`
+        `File ${filePath} does not exist and createIfMissing is false`,
       );
     }
 
-    const existingLines = fileContent.split('\n');
+    const existingLines = fileContent.split("\n");
 
     // Handle absent state (remove lines)
-    if (state === 'absent') {
-      const filteredLines = existingLines.filter(line => !lines.includes(line));
+    if (state === "absent") {
+      const filteredLines = existingLines.filter(
+        (line) => !lines.includes(line),
+      );
 
       if (filteredLines.length === existingLines.length) {
-        logger.info('No lines to remove from file', { sessionId, filePath });
+        logger.info("No lines to remove from file", { sessionId, filePath });
         return {
           ok: true,
-          added: 0
+          added: 0,
         };
       }
 
       const removedCount = existingLines.length - filteredLines.length;
-      const newContent = filteredLines.join('\n');
+      const newContent = filteredLines.join("\n");
 
       // Write file (may need sudo)
       try {
@@ -353,20 +429,20 @@ export async function ensureLinesInFile(
         if (sudoPassword) {
           // Try with sudo by writing to temp file and moving
           const tempDir = resolveRemoteTempDir(osInfo);
-          const baseTempDir = tempDir.replace(/\/+$/, '');
+          const baseTempDir = tempDir.replace(/\/+$/, "");
           const tempFile = `${baseTempDir}/ssh-mcp-${Date.now()}.tmp`;
           await writeFile(sessionId, tempFile, newContent);
 
           const moveResult = await execSudo(
             sessionId,
             `mv ${tempFile} ${filePath}`,
-            sudoPassword
+            sudoPassword,
           );
 
           if (moveResult.code !== 0) {
             throw createFilesystemError(
               `Failed to move temporary file to ${filePath}`,
-              'Check file permissions and sudo access'
+              "Check file permissions and sudo access",
             );
           }
         } else {
@@ -374,15 +450,15 @@ export async function ensureLinesInFile(
         }
       }
 
-      logger.info('Lines removed from file successfully', {
+      logger.info("Lines removed from file successfully", {
         sessionId,
         filePath,
-        removed: removedCount
+        removed: removedCount,
       });
 
       return {
         ok: true,
-        added: -removedCount  // Negative number indicates removed lines
+        added: -removedCount, // Negative number indicates removed lines
       };
     }
 
@@ -397,17 +473,17 @@ export async function ensureLinesInFile(
     }
 
     if (missingLines.length === 0) {
-      logger.info('All lines already exist in file', { sessionId, filePath });
+      logger.info("All lines already exist in file", { sessionId, filePath });
       return {
         ok: true,
-        added: 0
+        added: 0,
       };
     }
 
     // Add missing lines
     const newContent = fileExists
-      ? fileContent + '\n' + missingLines.join('\n')
-      : missingLines.join('\n');
+      ? fileContent + "\n" + missingLines.join("\n")
+      : missingLines.join("\n");
 
     // Write file (may need sudo)
     try {
@@ -416,20 +492,20 @@ export async function ensureLinesInFile(
       if (sudoPassword) {
         // Try with sudo by writing to temp file and moving
         const tempDir = resolveRemoteTempDir(osInfo);
-        const baseTempDir = tempDir.replace(/\/+$/, '');
+        const baseTempDir = tempDir.replace(/\/+$/, "");
         const tempFile = `${baseTempDir}/ssh-mcp-${Date.now()}.tmp`;
         await writeFile(sessionId, tempFile, newContent);
 
         const moveResult = await execSudo(
           sessionId,
           `mv ${tempFile} ${filePath}`,
-          sudoPassword
+          sudoPassword,
         );
 
         if (moveResult.code !== 0) {
           throw createFilesystemError(
             `Failed to move temporary file to ${filePath}`,
-            'Check file permissions and sudo access'
+            "Check file permissions and sudo access",
           );
         }
       } else {
@@ -437,19 +513,23 @@ export async function ensureLinesInFile(
       }
     }
 
-    logger.info('Lines added to file successfully', {
+    logger.info("Lines added to file successfully", {
       sessionId,
       filePath,
-      added: missingLines.length
+      added: missingLines.length,
     });
 
     return {
       ok: true,
-      added: missingLines.length
+      added: missingLines.length,
     };
-
   } catch (error) {
-    logger.error('Failed to ensure lines in file', { sessionId, filePath, state, error });
+    logger.error("Failed to ensure lines in file", {
+      sessionId,
+      filePath,
+      state,
+      error,
+    });
     throw error;
   }
 }
@@ -461,24 +541,24 @@ export async function applyPatch(
   sessionId: string,
   filePath: string,
   diff: string,
-  sudoPassword?: string
+  sudoPassword?: string,
 ): Promise<PatchResult> {
-  logger.debug('Applying patch to file', { sessionId, filePath });
+  logger.debug("Applying patch to file", { sessionId, filePath });
 
   try {
     const osInfo = await sessionManager.getOSInfo(sessionId);
     // Check if patch command is available
-    const hasPatch = await commandExists(sessionId, 'patch');
+    const hasPatch = await commandExists(sessionId, "patch");
     if (!hasPatch) {
       throw createPatchError(
-        'patch command not found on remote system',
-        'Install patch utility or apply changes manually'
+        "patch command not found on remote system",
+        "Install patch utility or apply changes manually",
       );
     }
 
     // Write patch to temporary file
     const tempDir = resolveRemoteTempDir(osInfo);
-    const baseTempDir = tempDir.replace(/\/+$/, '');
+    const baseTempDir = tempDir.replace(/\/+$/, "");
     const tempPatchFile = `${baseTempDir}/ssh-mcp-patch-${Date.now()}.patch`;
     await writeFile(sessionId, tempPatchFile, diff);
 
@@ -486,13 +566,13 @@ export async function applyPatch(
       // Test patch first (dry run)
       const testResult = await execCommand(
         sessionId,
-        `patch --dry-run -p0 ${filePath} < ${tempPatchFile}`
+        `patch --dry-run -p0 ${filePath} < ${tempPatchFile}`,
       );
 
       if (testResult.code !== 0) {
         throw createPatchError(
-          'Patch would fail to apply',
-          `Patch test failed: ${testResult.stderr}`
+          "Patch would fail to apply",
+          `Patch test failed: ${testResult.stderr}`,
         );
       }
 
@@ -508,36 +588,38 @@ export async function applyPatch(
 
       const patchResult: PatchResult = {
         ok: result.code === 0,
-        changed: result.code === 0
+        changed: result.code === 0,
       };
 
       if (result.code === 0) {
-        logger.info('Patch applied successfully', { sessionId, filePath });
+        logger.info("Patch applied successfully", { sessionId, filePath });
       } else {
-        logger.error('Patch application failed', {
+        logger.error("Patch application failed", {
           sessionId,
           filePath,
           code: result.code,
-          stderr: result.stderr
+          stderr: result.stderr,
         });
       }
 
       return patchResult;
-
     } finally {
       // Clean up temporary patch file
       try {
-        const cleanupCommand = osInfo.platform === 'windows'
-          ? `Remove-Item -Path ${tempPatchFile} -Force -ErrorAction SilentlyContinue`
-          : `rm -f ${tempPatchFile}`;
+        const cleanupCommand =
+          osInfo.platform === "windows"
+            ? `Remove-Item -Path ${tempPatchFile} -Force -ErrorAction SilentlyContinue`
+            : `rm -f ${tempPatchFile}`;
         await execCommand(sessionId, cleanupCommand);
       } catch (error) {
-        logger.warn('Failed to clean up temporary patch file', { tempPatchFile, error });
+        logger.warn("Failed to clean up temporary patch file", {
+          tempPatchFile,
+          error,
+        });
       }
     }
-
   } catch (error) {
-    logger.error('Failed to apply patch', { sessionId, filePath, error });
+    logger.error("Failed to apply patch", { sessionId, filePath, error });
     throw error;
   }
 }
@@ -548,28 +630,28 @@ export async function applyPatch(
 async function checkPackageInstalled(
   sessionId: string,
   packageName: string,
-  pm: PackageManager
+  pm: PackageManager,
 ): Promise<boolean> {
   let checkCommand: string;
 
   switch (pm) {
-    case 'apt':
+    case "apt":
       checkCommand = `dpkg -l ${packageName} | grep -q '^ii'`;
       break;
-    case 'dnf':
-    case 'yum':
+    case "dnf":
+    case "yum":
       checkCommand = `${pm} list installed ${packageName}`;
       break;
-    case 'pacman':
+    case "pacman":
       checkCommand = `pacman -Q ${packageName}`;
       break;
-    case 'apk':
+    case "apk":
       checkCommand = `apk info -e ${packageName}`;
       break;
-    case 'zypper':
+    case "zypper":
       checkCommand = `zypper se -i ${packageName}`;
       break;
-    case 'brew':
+    case "brew":
       checkCommand = `brew list --versions ${packageName}`;
       break;
     default:
@@ -589,19 +671,19 @@ async function checkPackageInstalled(
  */
 function getInstallCommand(pm: PackageManager, packageName: string): string {
   switch (pm) {
-    case 'apt':
+    case "apt":
       return `apt-get update && apt-get install -y ${packageName}`;
-    case 'dnf':
+    case "dnf":
       return `dnf install -y ${packageName}`;
-    case 'yum':
+    case "yum":
       return `yum install -y ${packageName}`;
-    case 'pacman':
+    case "pacman":
       return `pacman -S --noconfirm ${packageName}`;
-    case 'apk':
+    case "apk":
       return `apk add ${packageName}`;
-    case 'zypper':
+    case "zypper":
       return `zypper install -y ${packageName}`;
-    case 'brew':
+    case "brew":
       return `brew install ${packageName}`;
     default:
       throw createPackageManagerError(`Unsupported package manager: ${pm}`);

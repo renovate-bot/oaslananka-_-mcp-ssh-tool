@@ -1,4 +1,4 @@
-import { logger } from './logging.js';
+import { logger } from "./logging.js";
 
 /**
  * Retry configuration options
@@ -36,7 +36,7 @@ const DEFAULT_OPTIONS: RetryOptions = {
   initialDelayMs: 1000,
   maxDelayMs: 30000,
   backoffMultiplier: 2,
-  jitter: true
+  jitter: true,
 };
 
 /**
@@ -47,13 +47,13 @@ function defaultIsRetryable(error: unknown): boolean {
     const message = error.message.toLowerCase();
     // Retry on transient errors
     return (
-      message.includes('timeout') ||
-      message.includes('etimedout') ||
-      message.includes('econnreset') ||
-      message.includes('econnrefused') ||
-      message.includes('epipe') ||
-      message.includes('network') ||
-      message.includes('socket hang up')
+      message.includes("timeout") ||
+      message.includes("etimedout") ||
+      message.includes("econnreset") ||
+      message.includes("econnrefused") ||
+      message.includes("epipe") ||
+      message.includes("network") ||
+      message.includes("socket hang up")
     );
   }
   return false;
@@ -62,11 +62,9 @@ function defaultIsRetryable(error: unknown): boolean {
 /**
  * Calculate delay with optional jitter
  */
-function calculateDelay(
-  attempt: number,
-  options: RetryOptions
-): number {
-  const exponentialDelay = options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt - 1);
+function calculateDelay(attempt: number, options: RetryOptions): number {
+  const exponentialDelay =
+    options.initialDelayMs * Math.pow(options.backoffMultiplier, attempt - 1);
   const cappedDelay = Math.min(exponentialDelay, options.maxDelayMs);
 
   if (options.jitter) {
@@ -83,7 +81,7 @@ function calculateDelay(
  * Sleep for a given duration
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -92,7 +90,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options: Partial<RetryOptions> = {}
+  options: Partial<RetryOptions> = {},
 ): Promise<RetryResult<T>> {
   const opts: RetryOptions = { ...DEFAULT_OPTIONS, ...options };
   const isRetryable = opts.isRetryable || defaultIsRetryable;
@@ -107,24 +105,24 @@ export async function withRetry<T>(
         success: true,
         result,
         attempts: attempt,
-        totalTimeMs: Date.now() - startTime
+        totalTimeMs: Date.now() - startTime,
       };
     } catch (error) {
       lastError = error;
 
       // Check if we should retry
       if (attempt >= opts.maxAttempts || !isRetryable(error)) {
-        logger.debug('Retry: giving up', {
+        logger.debug("Retry: giving up", {
           attempt,
           maxAttempts: opts.maxAttempts,
-          retryable: isRetryable(error)
+          retryable: isRetryable(error),
         });
         break;
       }
 
       const delayMs = calculateDelay(attempt, opts);
 
-      logger.debug('Retry: scheduling retry', { attempt, delayMs });
+      logger.debug("Retry: scheduling retry", { attempt, delayMs });
 
       if (opts.onRetry) {
         opts.onRetry(attempt, error, delayMs);
@@ -138,7 +136,7 @@ export async function withRetry<T>(
     success: false,
     error: lastError,
     attempts: opts.maxAttempts,
-    totalTimeMs: Date.now() - startTime
+    totalTimeMs: Date.now() - startTime,
   };
 }
 
@@ -146,13 +144,20 @@ export async function withRetry<T>(
  * Decorator-style retry wrapper for class methods
  */
 export function retryable<T extends (...args: any[]) => Promise<any>>(
-  options: Partial<RetryOptions> = {}
+  options: Partial<RetryOptions> = {},
 ) {
-  return function (_target: any, _propertyKey: string, descriptor: PropertyDescriptor) {
+  return function (
+    _target: any,
+    _propertyKey: string,
+    descriptor: PropertyDescriptor,
+  ) {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
-      const result = await withRetry(() => originalMethod.apply(this, args), options);
+      const result = await withRetry(
+        () => originalMethod.apply(this, args),
+        options,
+      );
 
       if (!result.success) {
         throw result.error;
@@ -170,7 +175,7 @@ export function retryable<T extends (...args: any[]) => Promise<any>>(
  */
 export async function retry<T>(
   fn: () => Promise<T>,
-  options: Partial<RetryOptions> = {}
+  options: Partial<RetryOptions> = {},
 ): Promise<T> {
   const result = await withRetry(fn, options);
 

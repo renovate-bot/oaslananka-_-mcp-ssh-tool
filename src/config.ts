@@ -1,4 +1,4 @@
-import { logger } from './logging.js';
+import { logger } from "./logging.js";
 
 /**
  * Server configuration options
@@ -40,13 +40,13 @@ const DEFAULT_CONFIG: ServerConfig = {
   rateLimit: {
     enabled: true,
     maxRequests: 100,
-    windowMs: 60000
+    windowMs: 60000,
   },
   security: {
     allowRootLogin: true,
     requireHostKeyVerification: false,
-    allowedCiphers: []
-  }
+    allowedCiphers: [],
+  },
 };
 
 /**
@@ -57,7 +57,7 @@ export class ConfigManager {
 
   constructor(overrides: Partial<ServerConfig> = {}) {
     this.config = this.loadConfig(overrides);
-    logger.debug('Configuration loaded', { config: this.config });
+    logger.debug("Configuration loaded", { config: this.config });
   }
 
   private loadConfig(overrides: Partial<ServerConfig>): ServerConfig {
@@ -72,15 +72,18 @@ export class ConfigManager {
       config.sessionTtlMs = parseInt(process.env.SSH_MCP_SESSION_TTL, 10);
     }
     if (process.env.SSH_MCP_COMMAND_TIMEOUT) {
-      config.commandTimeoutMs = parseInt(process.env.SSH_MCP_COMMAND_TIMEOUT, 10);
+      config.commandTimeoutMs = parseInt(
+        process.env.SSH_MCP_COMMAND_TIMEOUT,
+        10,
+      );
     }
-    if (process.env.SSH_MCP_DEBUG === 'true') {
+    if (process.env.SSH_MCP_DEBUG === "true") {
       config.debug = true;
     }
-    if (process.env.SSH_MCP_RATE_LIMIT === 'false') {
+    if (process.env.SSH_MCP_RATE_LIMIT === "false") {
       config.rateLimit.enabled = false;
     }
-    if (process.env.SSH_MCP_STRICT_HOST_KEY === 'true') {
+    if (process.env.SSH_MCP_STRICT_HOST_KEY === "true") {
       config.security.requireHostKeyVerification = true;
     }
 
@@ -107,7 +110,7 @@ export class ConfigManager {
    */
   update(updates: Partial<ServerConfig>): void {
     this.config = { ...this.config, ...updates };
-    logger.info('Configuration updated', { updates });
+    logger.info("Configuration updated", { updates });
   }
 }
 

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Authentication configuration for SSH connections
@@ -18,7 +18,7 @@ export interface ConnectionParams {
   host: string;
   username: string;
   port?: number;
-  auth?: 'auto' | 'password' | 'key' | 'agent';
+  auth?: "auto" | "password" | "key" | "agent";
   password?: string;
   privateKey?: string;
   privateKeyPath?: string;
@@ -70,7 +70,7 @@ export interface FileStatInfo {
   size: number;
   mtime: Date;
   mode: number;
-  type: 'file' | 'directory' | 'symlink' | 'other';
+  type: "file" | "directory" | "symlink" | "other";
 }
 
 /**
@@ -78,7 +78,7 @@ export interface FileStatInfo {
  */
 export interface DirEntry {
   name: string;
-  type: 'file' | 'directory' | 'symlink' | 'other';
+  type: "file" | "directory" | "symlink" | "other";
   size?: number;
   mtime?: Date;
   mode?: number;
@@ -95,23 +95,28 @@ export interface DirListResult {
 /**
  * OS detection result
  */
-export type Platform = 'linux' | 'darwin' | 'windows' | 'unknown';
+export type Platform = "linux" | "darwin" | "windows" | "unknown";
 
 export type PackageManager =
-  | 'apt'
-  | 'dnf'
-  | 'yum'
-  | 'pacman'
-  | 'apk'
-  | 'zypper'
-  | 'brew'
-  | 'choco'
-  | 'winget'
-  | 'unknown';
+  | "apt"
+  | "dnf"
+  | "yum"
+  | "pacman"
+  | "apk"
+  | "zypper"
+  | "brew"
+  | "choco"
+  | "winget"
+  | "unknown";
 
-export type InitSystem = 'systemd' | 'service' | 'launchd' | 'windows-service' | 'unknown';
+export type InitSystem =
+  | "systemd"
+  | "service"
+  | "launchd"
+  | "windows-service"
+  | "unknown";
 
-export type ShellType = 'bash' | 'sh' | 'powershell' | 'cmd' | 'unknown';
+export type ShellType = "bash" | "sh" | "powershell" | "cmd" | "unknown";
 
 export interface OSInfo {
   platform: Platform;
@@ -163,14 +168,14 @@ export interface PatchResult {
  * Custom error codes for SSH MCP operations
  */
 export enum ErrorCode {
-  EAUTH = 'EAUTH',
-  ECONN = 'ECONN',
-  ETIMEOUT = 'ETIMEOUT',
-  ENOSUDO = 'ENOSUDO',
-  EPMGR = 'EPMGR',
-  EFS = 'EFS',
-  EPATCH = 'EPATCH',
-  EBADREQ = 'EBADREQ'
+  EAUTH = "EAUTH",
+  ECONN = "ECONN",
+  ETIMEOUT = "ETIMEOUT",
+  ENOSUDO = "ENOSUDO",
+  EPMGR = "EPMGR",
+  EFS = "EFS",
+  EPATCH = "EPATCH",
+  EBADREQ = "EBADREQ",
 }
 
 /**
@@ -184,10 +189,10 @@ export class SSHMCPError extends Error {
     public hint?: string,
     public userFriendlyMessage?: string,
     public recoverable: boolean = true,
-    public suggestedAction?: string
+    public suggestedAction?: string,
   ) {
     super(message);
-    this.name = 'SSHMCPError';
+    this.name = "SSHMCPError";
   }
 
   /**
@@ -200,7 +205,7 @@ export class SSHMCPError extends Error {
       hint: this.hint,
       userFriendlyMessage: this.userFriendlyMessage,
       recoverable: this.recoverable,
-      suggestedAction: this.suggestedAction
+      suggestedAction: this.suggestedAction,
     };
   }
 }
@@ -210,7 +215,7 @@ export const ConnectionParamsSchema = z.object({
   host: z.string().min(1),
   username: z.string().min(1),
   port: z.number().min(1).max(65535).optional(),
-  auth: z.enum(['auto', 'password', 'key', 'agent']).optional().default('auto'),
+  auth: z.enum(["auto", "password", "key", "agent"]).optional().default("auto"),
   password: z.string().optional(),
   privateKey: z.string().optional(),
   privateKeyPath: z.string().optional(),
@@ -219,11 +224,11 @@ export const ConnectionParamsSchema = z.object({
   readyTimeoutMs: z.number().min(1000).optional().default(20000),
   ttlMs: z.number().min(10000).optional().default(900000),
   strictHostKeyChecking: z.boolean().optional().default(false),
-  knownHostsPath: z.string().optional()
+  knownHostsPath: z.string().optional(),
 });
 
 export const SessionIdSchema = z.object({
-  sessionId: z.string().min(1)
+  sessionId: z.string().min(1),
 });
 
 export const ExecSchema = z.object({
@@ -231,7 +236,11 @@ export const ExecSchema = z.object({
   command: z.string().min(1),
   cwd: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
-  timeoutMs: z.number().min(1000).optional().describe('Command execution timeout in milliseconds')
+  timeoutMs: z
+    .number()
+    .min(1000)
+    .optional()
+    .describe("Command execution timeout in milliseconds"),
 });
 
 export const SudoSchema = z.object({
@@ -239,71 +248,75 @@ export const SudoSchema = z.object({
   command: z.string().min(1),
   password: z.string().optional(),
   cwd: z.string().optional(),
-  timeoutMs: z.number().min(1000).optional().describe('Command execution timeout in milliseconds')
+  timeoutMs: z
+    .number()
+    .min(1000)
+    .optional()
+    .describe("Command execution timeout in milliseconds"),
 });
 
 export const FSReadSchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1),
-  encoding: z.string().optional().default('utf8')
+  encoding: z.string().optional().default("utf8"),
 });
 
 export const FSWriteSchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1),
   data: z.string(),
-  mode: z.number().optional()
+  mode: z.number().optional(),
 });
 
 export const FSStatSchema = z.object({
   sessionId: z.string().min(1),
-  path: z.string().min(1)
+  path: z.string().min(1),
 });
 
 export const FSListSchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1),
   page: z.number().min(0).optional(),
-  limit: z.number().min(1).max(1000).optional().default(100)
+  limit: z.number().min(1).max(1000).optional().default(100),
 });
 
 export const FSPathSchema = z.object({
   sessionId: z.string().min(1),
-  path: z.string().min(1)
+  path: z.string().min(1),
 });
 
 export const FSRenameSchema = z.object({
   sessionId: z.string().min(1),
   from: z.string().min(1),
-  to: z.string().min(1)
+  to: z.string().min(1),
 });
 
 export const EnsurePackageSchema = z.object({
   sessionId: z.string().min(1),
   name: z.string().min(1),
-  state: z.enum(['present', 'absent']).default('present'),
-  sudoPassword: z.string().optional()
+  state: z.enum(["present", "absent"]).default("present"),
+  sudoPassword: z.string().optional(),
 });
 
 export const EnsureServiceSchema = z.object({
   sessionId: z.string().min(1),
   name: z.string().min(1),
-  state: z.enum(['started', 'stopped', 'restarted', 'enabled', 'disabled']),
-  sudoPassword: z.string().optional()
+  state: z.enum(["started", "stopped", "restarted", "enabled", "disabled"]),
+  sudoPassword: z.string().optional(),
 });
 
 export const EnsureLinesSchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1),
   lines: z.array(z.string()),
-  state: z.enum(['present', 'absent']).default('present'),
+  state: z.enum(["present", "absent"]).default("present"),
   createIfMissing: z.boolean().optional().default(true),
-  sudoPassword: z.string().optional()
+  sudoPassword: z.string().optional(),
 });
 
 export const PatchApplySchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1),
   diff: z.string(),
-  sudoPassword: z.string().optional()
+  sudoPassword: z.string().optional(),
 });
