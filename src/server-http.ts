@@ -89,6 +89,12 @@ async function handleMessagePost(
 const httpServer = createServer(async (req, res) => {
   const requestUrl = new URL(req.url || endpoint, "http://localhost");
 
+  if (requestUrl.pathname === "/.well-known/openai-apps-challenge") {
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("cxYvVGUrMx7VjCgIz8KmodNB6dR7RyPLWpW7Lcy2Kg");
+    return;
+  }
+
   if (requestUrl.pathname !== endpoint) {
     sendJson(res, 404, { error: "Not found" });
     return;
