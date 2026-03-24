@@ -1,7 +1,7 @@
 {
   "name": "mcp-ssh-tool",
   "version": "1.3.0",
-  "mcpName": "mcp-ssh-tool",
+  "mcpName": "io.github.oaslananka/mcp-ssh-tool",
   "description": "Model Context Protocol (MCP) SSH client server for remote automation",
   "type": "module",
   "main": "dist/index.js",
@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "mcp.json",
+    "server.json",
     "README.md",
     "LICENSE",
     "REGISTRY_SUBMISSION.md",
@@ -33,7 +34,7 @@
     "start:http": "node dist/server-http.js",
     "setup:chatgpt": "node scripts/setup-chatgpt.mjs",
     "sync-version": "node scripts/sync-version.mjs",
-    "version": "node scripts/sync-version.mjs && git add mcp.json registry/mcp-ssh-tool/mcp.json src/mcp.ts"
+    "version": "node scripts/sync-version.mjs && git add mcp.json server.json registry/mcp-ssh-tool/mcp.json src/mcp.ts"
   },
   "keywords": [
     "mcp",

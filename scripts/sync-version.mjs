@@ -20,6 +20,20 @@ if (fs.existsSync(mcpJsonPath)) {
   console.log('  Updated: mcp.json');
 }
 
+// server.json
+const serverJsonPath = path.join(root, 'server.json');
+if (fs.existsSync(serverJsonPath)) {
+  const serverJson = JSON.parse(fs.readFileSync(serverJsonPath, 'utf8'));
+  serverJson.version = version;
+  if (Array.isArray(serverJson.packages)) {
+    for (const pkg of serverJson.packages) {
+      pkg.version = version;
+    }
+  }
+  fs.writeFileSync(serverJsonPath, JSON.stringify(serverJson, null, 2) + '\n');
+  console.log('  Updated: server.json');
+}
+
 // registry/mcp-ssh-tool/mcp.json
 const regPath = path.join(root, 'registry', 'mcp-ssh-tool', 'mcp.json');
 if (fs.existsSync(regPath)) {
