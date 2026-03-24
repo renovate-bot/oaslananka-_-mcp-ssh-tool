@@ -1,4 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { URL } from "node:url";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { SSHMCPServer } from "./mcp.js";
@@ -37,7 +41,10 @@ async function handleSseConnection(
   };
 
   transport.onerror = (error) => {
-    logger.error("HTTP/SSE transport error", { sessionId, error: error.message });
+    logger.error("HTTP/SSE transport error", {
+      sessionId,
+      error: error.message,
+    });
   };
 
   sessions.set(sessionId, { server, transport });
