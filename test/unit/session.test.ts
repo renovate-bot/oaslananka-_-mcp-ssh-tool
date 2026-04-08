@@ -83,9 +83,11 @@ describe("SessionManager", () => {
       auth: "password",
     });
     const session = manager.getSession(result.sessionId);
-    const connectConfig = (session?.ssh as NodeSSH & {
-      __connectConfig?: Record<string, unknown>;
-    }).__connectConfig;
+    const connectConfig = (
+      session?.ssh as NodeSSH & {
+        __connectConfig?: Record<string, unknown>;
+      }
+    ).__connectConfig;
 
     expect(result.sftpAvailable).toBe(true);
     expect(connectConfig).toEqual(
