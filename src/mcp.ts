@@ -3,17 +3,20 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
   ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
   ReadResourceRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { AppContainer } from "./container.js";
 import { logger } from "./logging.js";
 import { listResources, readResource } from "./resources.js";
+import { getMCPPrompt, listMCPPrompts } from "./prompts.js";
 import { withSpan } from "./telemetry.js";
 import { createToolRegistry } from "./tools/index.js";
 
-export const SERVER_VERSION = "1.3.5";
+export const SERVER_VERSION = "2.0.0";
 
 export class SSHMCPServer {
   private readonly server: Server;
@@ -29,6 +32,7 @@ export class SSHMCPServer {
         capabilities: {
           tools: {},
           resources: {},
+          prompts: {},
         },
       },
     );
@@ -66,6 +70,38 @@ export class SSHMCPServer {
           attributes: {
             "mcp.request.kind": "read_resource",
             "mcp.resource.uri": request.params.uri,
+          },
+        },
+      ),
+    );
+
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () =>
+      withSpan(
+        "mcp.list_prompts",
+        async (span) => {
+          span.setAttribute("mcp.request.kind", "list_prompts");
+          return listMCPPrompts();
+        },
+        {
+          attributes: {
+            "mcp.request.kind": "list_prompts",
+          },
+        },
+      ),
+    );
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) =>
+      withSpan(
+        "mcp.get_prompt",
+        async (span) => {
+          span.setAttribute("mcp.request.kind", "get_prompt");
+          span.setAttribute("mcp.prompt.name", request.params.name);
+          return getMCPPrompt(request.params.name, request.params.arguments ?? {});
+        },
+        {
+          attributes: {
+            "mcp.request.kind": "get_prompt",
+            "mcp.prompt.name": request.params.name,
           },
         },
       ),

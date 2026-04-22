@@ -1,10 +1,11 @@
 import { describe, expect, jest, test } from "@jest/globals";
 import { ErrorCode } from "../../src/types.js";
 import { createProcessService } from "../../src/process.js";
+import { createAllowPolicy, createSessionInfo, createTestConfig } from "./helpers.js";
 
 function createDeps() {
   const execCommand = jest.fn() as any;
-  const session = { ssh: { execCommand } };
+  const session = { info: createSessionInfo(), ssh: { execCommand } };
   const sessionManager = {
     getSession: jest.fn(() => session) as any,
     getOSInfo: jest.fn(async () => ({
@@ -19,14 +20,19 @@ function createDeps() {
     })) as any,
   };
 
-  return { execCommand, sessionManager };
+  return {
+    config: createTestConfig(),
+    execCommand,
+    policy: createAllowPolicy(),
+    sessionManager,
+  };
 }
 
 describe("createProcessService", () => {
   test("executes commands successfully", async () => {
-    const { execCommand, sessionManager } = createDeps();
+    const { config, execCommand, policy, sessionManager } = createDeps();
     execCommand.mockResolvedValue({ code: 0, stdout: "ok", stderr: "" });
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     const result = await service.execCommand("session-1", "echo ok", "/tmp", {
       NAME: "value",
@@ -42,9 +48,9 @@ describe("createProcessService", () => {
   });
 
   test("fails when session is missing", async () => {
-    const { sessionManager } = createDeps();
+    const { config, policy, sessionManager } = createDeps();
     sessionManager.getSession.mockReturnValue(undefined);
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     await expect(service.execCommand("missing", "echo ok")).rejects.toThrow(
       "Session missing not found or expired",
@@ -52,9 +58,9 @@ describe("createProcessService", () => {
   });
 
   test("surfaces timeout errors", async () => {
-    const { execCommand, sessionManager } = createDeps();
+    const { config, execCommand, policy, sessionManager } = createDeps();
     execCommand.mockImplementation(() => new Promise(() => undefined));
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     await expect(
       service.execCommand("session-1", "sleep 10", undefined, undefined, 10),
@@ -62,7 +68,7 @@ describe("createProcessService", () => {
   });
 
   test("rejects sudo on windows hosts", async () => {
-    const { sessionManager } = createDeps();
+    const { config, policy, sessionManager } = createDeps();
     sessionManager.getOSInfo.mockResolvedValue({
       platform: "windows",
       distro: "windows",
@@ -72,7 +78,7 @@ describe("createProcessService", () => {
       packageManager: "winget",
       init: "windows-service",
     });
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     await expect(service.execSudo("session-1", "dir")).rejects.toMatchObject({
       code: ErrorCode.ENOSUDO,
@@ -80,13 +86,13 @@ describe("createProcessService", () => {
   });
 
   test("wraps sudo authentication failures", async () => {
-    const { execCommand, sessionManager } = createDeps();
+    const { config, execCommand, policy, sessionManager } = createDeps();
     execCommand.mockResolvedValue({
       code: 1,
       stdout: "",
       stderr: "Sorry, try again",
     });
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     await expect(service.execSudo("session-1", "apt-get update", "secret")).rejects.toMatchObject({
       code: ErrorCode.ENOSUDO,
@@ -94,25 +100,25 @@ describe("createProcessService", () => {
   });
 
   test("commandExists and getAvailableShell probe the remote host", async () => {
-    const { execCommand, sessionManager } = createDeps();
+    const { config, execCommand, policy, sessionManager } = createDeps();
     execCommand
       .mockResolvedValueOnce({ code: 1, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ code: 1, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ code: 0, stdout: "/bin/sh", stderr: "" })
       .mockRejectedValueOnce(new Error("boom"));
 
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     await expect(service.getAvailableShell("session-1")).resolves.toBe("sh");
     await expect(service.commandExists("session-1", "git")).resolves.toBe(false);
   });
 
   test("execWithShell wraps environment and cwd", async () => {
-    const { execCommand, sessionManager } = createDeps();
+    const { config, execCommand, policy, sessionManager } = createDeps();
     execCommand
       .mockResolvedValueOnce({ code: 0, stdout: "/bin/bash", stderr: "" })
       .mockResolvedValueOnce({ code: 0, stdout: "done", stderr: "" });
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     const result = await service.execWithShell("session-1", "echo $NAME", "/srv", {
       NAME: "demo",
@@ -124,9 +130,9 @@ describe("createProcessService", () => {
   });
 
   test("wraps non-timeout command failures", async () => {
-    const { execCommand, sessionManager } = createDeps();
+    const { config, execCommand, policy, sessionManager } = createDeps();
     execCommand.mockRejectedValue(new Error("network down"));
-    const service = createProcessService({ sessionManager } as any);
+    const service = createProcessService({ sessionManager, config, policy } as any);
 
     await expect(service.execCommand("session-1", "echo ok")).rejects.toMatchObject({
       code: ErrorCode.ECONN,

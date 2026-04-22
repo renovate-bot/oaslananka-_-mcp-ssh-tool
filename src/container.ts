@@ -1,12 +1,32 @@
 import { ConfigManager, type ServerConfig } from "./config.js";
+import { AuditLog } from "./audit.js";
 import { MetricsCollector } from "./metrics.js";
+import { PolicyEngine } from "./policy.js";
 import { RateLimiter } from "./rate-limiter.js";
 import { SessionManager } from "./session.js";
+
+function auditDetails(
+  action: string,
+  values: {
+    host?: string | undefined;
+    username?: string | undefined;
+    target?: string | undefined;
+  },
+) {
+  return {
+    action,
+    ...(values.host ? { host: values.host } : {}),
+    ...(values.username ? { username: values.username } : {}),
+    ...(values.target ? { target: values.target } : {}),
+  };
+}
 
 export interface AppContainer {
   config: ConfigManager;
   rateLimiter: RateLimiter;
   metrics: MetricsCollector;
+  auditLog: AuditLog;
+  policy: PolicyEngine;
   sessionManager: SessionManager;
 }
 
@@ -18,16 +38,32 @@ export function createContainer(configOverrides: Partial<ServerConfig> = {}): Ap
     blockOnLimit: true,
   });
   const metrics = new MetricsCollector();
+  const auditLog = new AuditLog();
+  const policy = new PolicyEngine(config.get("policy"), (decision, context) => {
+    metrics.recordPolicyDecision(decision.allowed, decision.mode);
+    auditLog.recordPolicyDecision(
+      decision,
+      auditDetails(context.action, {
+        host: context.host,
+        username: context.username,
+        target: context.path ?? context.command,
+      }),
+    );
+  });
   const sessionManager = new SessionManager(
     config.get("maxSessions"),
     config.get("sessionTtlMs"),
     config.get("cleanupIntervalMs"),
+    config.get("security"),
+    policy,
   );
 
   return {
     config,
     rateLimiter,
     metrics,
+    auditLog,
+    policy,
     sessionManager,
   };
 }
@@ -46,6 +82,22 @@ export function createTestContainer(overrides: Partial<AppContainer> = {}): AppC
       },
     });
 
+  const metrics = overrides.metrics ?? new MetricsCollector();
+  const auditLog = overrides.auditLog ?? new AuditLog();
+  const policy =
+    overrides.policy ??
+    new PolicyEngine(config.get("policy"), (decision, context) => {
+      metrics.recordPolicyDecision(decision.allowed, decision.mode);
+      auditLog.recordPolicyDecision(
+        decision,
+        auditDetails(context.action, {
+          host: context.host,
+          username: context.username,
+          target: context.path ?? context.command,
+        }),
+      );
+    });
+
   return {
     config,
     rateLimiter:
@@ -55,13 +107,17 @@ export function createTestContainer(overrides: Partial<AppContainer> = {}): AppC
         windowMs: config.get("rateLimit").windowMs,
         blockOnLimit: false,
       }),
-    metrics: overrides.metrics ?? new MetricsCollector(),
+    metrics,
+    auditLog,
+    policy,
     sessionManager:
       overrides.sessionManager ??
       new SessionManager(
         config.get("maxSessions"),
         config.get("sessionTtlMs"),
         config.get("cleanupIntervalMs"),
+        config.get("security"),
+        policy,
       ),
   };
 }

@@ -1,14 +1,16 @@
 import type { SFTPWrapper, Stats, FileEntry } from "ssh2";
-import { createFilesystemError, wrapError } from "./errors.js";
+import { createFilesystemError, createLimitError, wrapError } from "./errors.js";
 import { logger } from "./logging.js";
 import { buildRemoteCommand } from "./shell.js";
 import type { MetricsCollector } from "./metrics.js";
+import type { PolicyEngine } from "./policy.js";
 import type { SessionManager } from "./session.js";
+import type { ServerConfig } from "./config.js";
 import type { DirEntry, DirListResult, FileStatInfo } from "./types.js";
 import { ErrorCode } from "./types.js";
 
 export interface FsService {
-  readFile(sessionId: string, path: string, encoding?: string): Promise<string>;
+  readFile(sessionId: string, path: string, encoding?: string, maxBytes?: number): Promise<string>;
   writeFile(sessionId: string, path: string, data: string, mode?: number): Promise<boolean>;
   statFile(sessionId: string, path: string): Promise<FileStatInfo>;
   listDirectory(
@@ -28,7 +30,9 @@ export interface FsService {
 
 export interface FsServiceDeps {
   sessionManager: Pick<SessionManager, "getSession" | "getOSInfo">;
-  metrics: Pick<MetricsCollector, "recordFileRead" | "recordFileWrite">;
+  metrics: Pick<MetricsCollector, "recordFileRead" | "recordFileWrite" | "recordFileDelete">;
+  config: Pick<ServerConfig, "maxFileSize">;
+  policy: Pick<PolicyEngine, "assertAllowed">;
 }
 
 function shellQuote(value: string): string {
@@ -197,7 +201,16 @@ async function sftpRmdirRecursive(sftp: SFTPWrapper, dirPath: string): Promise<v
   await sftpRmdir(sftp, dirPath);
 }
 
-export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsService {
+const PORTABLE_STAT_FIELDS_COMMAND =
+  'type=other; if [ -L "$target" ]; then type=symlink; elif [ -d "$target" ]; then type=directory; elif [ -f "$target" ]; then type=file; fi; size=$( (stat -c %s "$target" 2>/dev/null || stat -f %z "$target" 2>/dev/null || wc -c < "$target" 2>/dev/null) | tr -d " " | head -n 1); mtime=$( (stat -c %Y "$target" 2>/dev/null || stat -f %m "$target" 2>/dev/null || echo 0) | head -n 1); mode=$( (stat -c %a "$target" 2>/dev/null || stat -f %Lp "$target" 2>/dev/null || echo 0) | head -n 1)';
+const PORTABLE_STAT_COMMAND = `${PORTABLE_STAT_FIELDS_COMMAND}; printf "%s\\t%s\\t%s\\t%s" "$type" "\${size:-0}" "\${mtime:-0}" "\${mode:-0}"`;
+
+export function createFsService({
+  sessionManager,
+  metrics,
+  config,
+  policy,
+}: FsServiceDeps): FsService {
   async function execFallback(sessionId: string, command: string): Promise<string> {
     const session = sessionManager.getSession(sessionId);
     if (!session) {
@@ -217,7 +230,12 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
     return result.stdout ?? "";
   }
 
-  async function readFile(sessionId: string, path: string, encoding = "utf8"): Promise<string> {
+  async function readFile(
+    sessionId: string,
+    path: string,
+    encoding = "utf8",
+    maxBytes?: number,
+  ): Promise<string> {
     logger.debug("Reading file", { sessionId, path, encoding });
 
     const session = sessionManager.getSession(sessionId);
@@ -226,6 +244,20 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
     }
 
     try {
+      policy.assertAllowed({
+        action: "fs.read",
+        path,
+        mode: session.info.policyMode,
+      });
+      const effectiveMaxBytes = maxBytes ?? config.maxFileSize;
+      const size = await getFileSize(sessionId, path);
+      if (size > effectiveMaxBytes) {
+        throw createLimitError(
+          `File ${path} is ${size} bytes, which exceeds the ${effectiveMaxBytes} byte read limit`,
+          "Use file_download for large files or raise SSH_MCP_MAX_FILE_SIZE intentionally.",
+        );
+      }
+
       if (!hasSftp(session)) {
         const data = await execFallback(sessionId, `cat ${shellQuote(path)}`);
         metrics.recordFileRead(Buffer.byteLength(data, "utf8"));
@@ -271,6 +303,15 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
     }
 
     try {
+      const decision = policy.assertAllowed({
+        action: "fs.write",
+        path,
+        mode: session.info.policyMode,
+      });
+      if (decision.mode === "explain") {
+        return true;
+      }
+
       if (!hasSftp(session)) {
         const tempPath = `${path}.tmp.${Date.now()}`;
         const chmodCommand =
@@ -338,7 +379,7 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
       if (!hasSftp(session)) {
         const output = await execFallback(
           sessionId,
-          `target=${shellQuote(path)}; if [ -L "$target" ]; then type=symlink; elif [ -d "$target" ]; then type=directory; elif [ -f "$target" ]; then type=file; else type=other; fi; size=$(stat -c '%s' "$target"); mtime=$(stat -c '%Y' "$target"); mode=$(stat -c '%a' "$target"); printf '%s\t%s\t%s\t%s' "$type" "$size" "$mtime" "$mode"`,
+          `target=${shellQuote(path)}; ${PORTABLE_STAT_COMMAND}`,
         );
 
         const [type = "other", size = "0", mtime = "0", mode = "0"] = output.trim().split("\t");
@@ -413,7 +454,7 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
       if (!hasSftp(session)) {
         const output = await execFallback(
           sessionId,
-          `dir=${shellQuote(path)}; for item in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do [ -e "$item" ] || continue; name=$(basename "$item"); if [ -L "$item" ]; then type=symlink; elif [ -d "$item" ]; then type=directory; elif [ -f "$item" ]; then type=file; else type=other; fi; size=$(stat -c '%s' "$item" 2>/dev/null || echo 0); mtime=$(stat -c '%Y' "$item" 2>/dev/null || echo 0); printf '%s\\t%s\\t%s\\t%s\\n' "$name" "$type" "$size" "$mtime"; done`,
+          `dir=${shellQuote(path)}; for item in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do [ -e "$item" ] || continue; name=$(basename "$item"); target="$item"; ${PORTABLE_STAT_FIELDS_COMMAND}; printf "%s\\t%s\\t%s\\t%s\\n" "$name" "$type" "\${size:-0}" "\${mtime:-0}"; done`,
         );
 
         const entries: DirEntry[] = output
@@ -509,6 +550,15 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
     }
 
     try {
+      const decision = policy.assertAllowed({
+        action: "fs.mkdir",
+        path,
+        mode: session.info.policyMode,
+      });
+      if (decision.mode === "explain") {
+        return true;
+      }
+
       if (!hasSftp(session)) {
         await execFallback(sessionId, `mkdir -p ${shellQuote(path)}`);
         logger.debug("Directories created successfully via SSH fallback", {
@@ -541,6 +591,16 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
     }
 
     try {
+      const decision = policy.assertAllowed({
+        action: "fs.remove",
+        path,
+        mode: session.info.policyMode,
+        destructive: true,
+      });
+      if (decision.mode === "explain") {
+        return true;
+      }
+
       if (!hasSftp(session)) {
         await execFallback(sessionId, `rm -rf ${shellQuote(path)}`);
         logger.debug("Path removed successfully via SSH fallback", {
@@ -562,6 +622,7 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
       }
 
       logger.debug("Path removed successfully", { sessionId, path });
+      metrics.recordFileDelete();
       return true;
     } catch (error) {
       logger.error("Failed to remove path", { sessionId, path, error });
@@ -582,6 +643,16 @@ export function createFsService({ sessionManager, metrics }: FsServiceDeps): FsS
     }
 
     try {
+      const decision = policy.assertAllowed({
+        action: "fs.rename",
+        path: from,
+        secondaryPath: to,
+        mode: session.info.policyMode,
+      });
+      if (decision.mode === "explain") {
+        return true;
+      }
+
       if (!hasSftp(session)) {
         await execFallback(sessionId, `mv ${shellQuote(from)} ${shellQuote(to)}`);
         logger.debug("File renamed successfully via SSH fallback", {

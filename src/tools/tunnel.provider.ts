@@ -7,6 +7,7 @@ import {
   TunnelLocalForwardSchema,
   TunnelRemoteForwardSchema,
 } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface TunnelToolProviderDeps {
@@ -23,6 +24,13 @@ export class TunnelToolProvider implements ToolProvider {
       {
         name: "tunnel_local_forward",
         description: "Creates a local SSH port forward",
+        annotations: annotate({
+          title: "Create Local SSH Tunnel",
+          readOnly: false,
+          destructive: false,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Local tunnel information"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -37,6 +45,13 @@ export class TunnelToolProvider implements ToolProvider {
       {
         name: "tunnel_remote_forward",
         description: "Creates a remote SSH port forward",
+        annotations: annotate({
+          title: "Create Remote SSH Tunnel",
+          readOnly: false,
+          destructive: false,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Remote tunnel information"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -51,6 +66,13 @@ export class TunnelToolProvider implements ToolProvider {
       {
         name: "tunnel_close",
         description: "Closes an active tunnel",
+        annotations: annotate({
+          title: "Close SSH Tunnel",
+          readOnly: false,
+          destructive: false,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Tunnel close result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -62,6 +84,12 @@ export class TunnelToolProvider implements ToolProvider {
       {
         name: "tunnel_list",
         description: "Lists active tunnels, optionally filtered by session",
+        annotations: annotate({
+          title: "List SSH Tunnels",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Active tunnels"),
         inputSchema: {
           type: "object" as const,
           properties: {

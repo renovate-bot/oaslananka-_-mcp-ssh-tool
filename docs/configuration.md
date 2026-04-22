@@ -1,63 +1,96 @@
 # Configuration
 
-`mcp-ssh-tool` reads configuration from environment variables and, for some
-tools, per-request arguments. Request arguments win over environment variables,
-and environment variables win over built-in defaults.
+Configuration comes from built-in v2 defaults, `SSH_MCP_POLICY_FILE`, environment variables, and per-request tool arguments. Per-request values win over environment values. Environment values win over defaults.
 
-## Core Environment Variables
+## Runtime
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LOG_LEVEL` | `info` | Logger verbosity. Supported values: `error`, `warn`, `info`, `debug`. |
-| `LOG_FORMAT` | `plain` | Log output format. Use `json` for log shippers and aggregators. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Enables OpenTelemetry tracing when set. A base OTLP URL is normalized to `/v1/traces`. |
-| `OTEL_SERVICE_NAME` | `mcp-ssh-tool` | Service name reported in OpenTelemetry spans. |
-| `OTEL_SERVICE_VERSION` | package version | Optional service version override for tracing backends. |
-| `STRICT_HOST_KEY_CHECKING` | `false` | Enables SSH host key verification in the session manager. |
-| `KNOWN_HOSTS_PATH` | `~/.ssh/known_hosts` | Overrides the `known_hosts` file used when strict host checking is enabled. |
-| `SSH_DEFAULT_KEY_DIR` | `~/.ssh` | Directory used for SSH key auto-discovery (`id_ed25519`, `id_rsa`, `id_ecdsa`). |
-| `SSH_MCP_MAX_SESSIONS` | `20` | Maximum number of concurrent SSH sessions stored by the session manager. |
-| `SSH_MCP_SESSION_TTL` | `900000` | Default session time-to-live in milliseconds. |
-| `SSH_MCP_COMMAND_TIMEOUT` | `30000` | Default command timeout in milliseconds for command execution helpers. |
-| `SSH_MCP_RATE_LIMIT` | `true` | Enables or disables global rate limiting. |
-| `SSH_MCP_DEBUG` | `false` | Compatibility flag used by `ConfigManager`; keep `LOG_LEVEL=debug` as the main switch for verbose logs. |
-| `SSH_MCP_STRICT_HOST_KEY` | `false` | Legacy compatibility alias for strict host key verification. Prefer `STRICT_HOST_KEY_CHECKING`. |
+| `LOG_LEVEL` | `info` | `error`, `warn`, `info`, or `debug`. |
+| `LOG_FORMAT` | `plain` | Use `json` for log shippers. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Enables OpenTelemetry trace export. |
+| `OTEL_SERVICE_NAME` | `mcp-ssh-tool` | Service name for traces. |
+| `SSH_MCP_MAX_SESSIONS` | `20` | Max in-memory sessions. |
+| `SSH_MCP_SESSION_TTL` | `900000` | Default session TTL in milliseconds. |
+| `SSH_MCP_COMMAND_TIMEOUT` | `30000` | Default process/stream timeout. |
+| `SSH_MCP_MAX_FILE_SIZE` | `10485760` | Max bytes for `fs_read`. |
+| `SSH_MCP_RATE_LIMIT` | `true` | Enables global tool-call rate limiting. |
+| `SSH_MCP_RATE_LIMIT_MAX` | `100` | Max requests in the rate-limit window. |
+| `SSH_MCP_RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window. |
 
-## Runtime Mode Variables
+## SSH Security
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SSH_MCP_DAEMON` | `false` | Keeps the CLI process alive after startup for daemon-style launches. |
-| `SSH_MCP_ONESHOT` | `false` | Allows a single request/response lifecycle in wrapper scripts. |
-| `PORT` | `3000` | HTTP/SSE port used by `npm run start:http`. |
+| `SSH_MCP_HOST_KEY_POLICY` | `strict` | `strict`, `accept-new`, or `insecure`. |
+| `SSH_MCP_KNOWN_HOSTS_PATH` | `~/.ssh/known_hosts` | Known-hosts file for strict verification. |
+| `KNOWN_HOSTS_PATH` | unset | Compatibility alias for known-hosts path. |
+| `STRICT_HOST_KEY_CHECKING` | unset | Deprecated boolean alias. `true` maps to `strict`; `false` maps to `insecure`. |
+| `SSH_MCP_STRICT_HOST_KEY` | unset | Deprecated boolean alias. |
+| `SSH_DEFAULT_KEY_DIR` | `~/.ssh` | Directory searched for `id_ed25519`, `id_rsa`, and `id_ecdsa`. |
+| `SSH_MCP_ALLOW_ROOT_LOGIN` | `false` | Allows SSH sessions as `root` when explicitly enabled. |
+| `SSH_MCP_ALLOWED_CIPHERS` | unset | Optional comma-separated SSH cipher allow-list. |
+
+## Policy
+
+`SSH_MCP_POLICY_FILE` is the canonical policy source. Environment variables are useful for simple deployments and override the file when provided.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SSH_MCP_POLICY_FILE` | unset | JSON policy file. |
+| `SSH_MCP_POLICY_MODE` | `enforce` | `enforce` or `explain`. |
+| `SSH_MCP_ALLOW_RAW_SUDO` | `false` | Allows raw `proc_sudo`. |
+| `SSH_MCP_ALLOW_DESTRUCTIVE_COMMANDS` | `false` | Allows high-risk command patterns. |
+| `SSH_MCP_ALLOW_DESTRUCTIVE_FS` | `false` | Allows destructive fs operations outside guarded defaults. |
+| `SSH_MCP_ALLOWED_HOSTS` | unset | Comma-separated exact strings or regexes. |
+| `SSH_MCP_COMMAND_ALLOW` | unset | Comma-separated command regex allow-list. |
+| `SSH_MCP_COMMAND_DENY` | unset | Comma-separated command regex deny-list. |
+| `SSH_MCP_PATH_ALLOW_PREFIXES` | `/tmp,/var/tmp,/home,/Users` | Prefixes where destructive fs operations may be allowed. |
+| `SSH_MCP_PATH_DENY_PREFIXES` | protected system paths | Prefixes that are always denied. |
+
+Example:
+
+```json
+{
+  "mode": "enforce",
+  "allowRootLogin": false,
+  "allowRawSudo": false,
+  "allowDestructiveCommands": false,
+  "allowDestructiveFs": false,
+  "allowedHosts": ["^prod-[0-9]+\\.example\\.com$"],
+  "commandAllow": ["^(uname|df|uptime|systemctl status)\\b"],
+  "commandDeny": ["rm\\s+-rf\\s+/", "shutdown", "reboot"],
+  "pathAllowPrefixes": ["/tmp", "/home/deploy"],
+  "pathDenyPrefixes": ["/etc/shadow", "/etc/sudoers", "/boot", "/dev", "/proc"]
+}
+```
+
+## HTTP Transport
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SSH_MCP_HTTP_HOST` | `127.0.0.1` | Bind host for Streamable HTTP. |
+| `SSH_MCP_HTTP_PORT` / `PORT` | `3000` | Bind port. |
+| `SSH_MCP_HTTP_BEARER_TOKEN_FILE` | unset | File containing the bearer token. Required for non-loopback bind. |
+| `SSH_MCP_HTTP_ALLOWED_ORIGINS` | loopback origins | Comma-separated Origin allow-list. Required for non-loopback bind. |
+| `SSH_MCP_ENABLE_LEGACY_SSE` | `false` | Enables compatibility `/sse` and `/messages` endpoints for one v2 cycle. |
 
 ## Example `.env`
 
 ```dotenv
 LOG_LEVEL=info
 LOG_FORMAT=json
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-OTEL_SERVICE_NAME=mcp-ssh-tool
-OTEL_SERVICE_VERSION=1.3.4
-STRICT_HOST_KEY_CHECKING=true
-KNOWN_HOSTS_PATH=/etc/ssh/ssh_known_hosts
+SSH_MCP_HOST_KEY_POLICY=strict
+SSH_MCP_KNOWN_HOSTS_PATH=/etc/ssh/ssh_known_hosts
+SSH_MCP_POLICY_FILE=/etc/mcp-ssh-tool/policy.json
 SSH_MCP_MAX_SESSIONS=50
 SSH_MCP_SESSION_TTL=1800000
 SSH_MCP_COMMAND_TIMEOUT=45000
-SSH_MCP_RATE_LIMIT=true
-PORT=3000
+SSH_MCP_MAX_FILE_SIZE=10485760
+SSH_MCP_HTTP_HOST=127.0.0.1
+SSH_MCP_HTTP_PORT=3000
 ```
 
-## Notes
+## Per-Session Overrides
 
-- `ssh_open_session` accepts `strictHostKeyChecking`, `knownHostsPath`, and
-  authentication fields directly; those request-level values override the
-  environment.
-- `SSH_AUTH_SOCK` is consumed automatically when SSH agent authentication is
-  available. It is usually supplied by the host environment and does not need
-  to be stored in `.env`.
-- When OpenTelemetry is disabled, `withSpan()` remains a no-op wrapper around
-  the active tracer provider, so local development does not require an OTLP
-  collector.
-- Package and service helpers intentionally target Unix-like systems. Windows
-  hosts can still use the lower-level SSH and file tools.
+`ssh_open_session` supports `hostKeyPolicy`, `expectedHostKeySha256`, `knownHostsPath`, and `policyMode`. Use `policyMode: "explain"` to produce a connection plan without opening SSH.

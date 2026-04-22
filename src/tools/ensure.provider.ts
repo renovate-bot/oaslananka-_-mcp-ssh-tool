@@ -7,6 +7,7 @@ import {
   EnsureServiceSchema,
   PatchApplySchema,
 } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface EnsureToolProviderDeps {
@@ -23,6 +24,13 @@ export class EnsureToolProvider implements ToolProvider {
       {
         name: "ensure_package",
         description: "Ensures a package is installed or removed",
+        annotations: annotate({
+          title: "Ensure Package State",
+          readOnly: false,
+          destructive: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Package state result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -44,6 +52,13 @@ export class EnsureToolProvider implements ToolProvider {
       {
         name: "ensure_service",
         description: "Ensures a service is in the desired state",
+        annotations: annotate({
+          title: "Ensure Service State",
+          readOnly: false,
+          destructive: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Service state result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -65,6 +80,13 @@ export class EnsureToolProvider implements ToolProvider {
       {
         name: "ensure_lines_in_file",
         description: "Ensures specific lines are present or absent in a file",
+        annotations: annotate({
+          title: "Ensure Lines In File",
+          readOnly: false,
+          destructive: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Line management result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -95,6 +117,13 @@ export class EnsureToolProvider implements ToolProvider {
       {
         name: "patch_apply",
         description: "Applies a patch to a file",
+        annotations: annotate({
+          title: "Apply Patch",
+          readOnly: false,
+          destructive: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Patch application result"),
         inputSchema: {
           type: "object" as const,
           properties: {

@@ -1,5 +1,6 @@
 import { describe, expect, jest, test } from "@jest/globals";
 import { createStreamingService, formatStreamOutput } from "../../src/streaming.js";
+import { createAllowPolicy, createSessionInfo, createTestConfig } from "./helpers.js";
 
 describe("createStreamingService", () => {
   test("streams stdout and stderr chunks", async () => {
@@ -15,7 +16,7 @@ describe("createStreamingService", () => {
     );
     const service = createStreamingService({
       sessionManager: {
-        getSession: () => ({ ssh: { execCommand } }) as any,
+        getSession: () => ({ info: createSessionInfo(), ssh: { execCommand } }) as any,
         getOSInfo: async () => ({
           platform: "linux",
           distro: "ubuntu",
@@ -27,6 +28,8 @@ describe("createStreamingService", () => {
           defaultShell: "bash",
         }),
       },
+      config: createTestConfig(),
+      policy: createAllowPolicy(),
     });
     const onChunk = jest.fn();
 
@@ -51,6 +54,8 @@ describe("createStreamingService", () => {
           throw new Error("unreachable");
         },
       },
+      config: createTestConfig(),
+      policy: createAllowPolicy(),
     });
 
     await expect(

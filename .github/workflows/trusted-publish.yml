@@ -1,0 +1,52 @@
+name: Publish with npm Provenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      azure_run_url:
+        description: "Azure publish validation run URL"
+        required: true
+      confirm:
+        description: "Type PUBLISH to publish the package"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ inputs.confirm == 'PUBLISH' }}
+    runs-on: ubuntu-latest
+    environment: npm-production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Record Azure validation URL
+        run: |
+          echo "Azure validation: ${{ inputs.azure_run_url }}"
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify package
+        run: |
+          npm run lint
+          npm test
+          npm run build
+          npm run sync-version -- --check
+          npm run pack:check
+          npm audit --audit-level=moderate
+
+      - name: Publish
+        run: npm publish --access public --provenance

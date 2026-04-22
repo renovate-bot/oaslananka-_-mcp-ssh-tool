@@ -157,6 +157,12 @@ describe("createEnsureService", () => {
         "session-1",
         installCommand,
         "secret",
+        undefined,
+        undefined,
+        expect.objectContaining({
+          policyAction: "ensure.package",
+          rawSudo: false,
+        }),
       );
 
       const removeDeps = createDeps();
@@ -191,6 +197,13 @@ describe("createEnsureService", () => {
         "session-1",
         removeCommand,
         "secret",
+        undefined,
+        undefined,
+        expect.objectContaining({
+          destructive: true,
+          policyAction: "ensure.package",
+          rawSudo: false,
+        }),
       );
     },
   );
@@ -212,6 +225,13 @@ describe("createEnsureService", () => {
       "session-1",
       "systemctl start nginx",
       "secret",
+      undefined,
+      undefined,
+      expect.objectContaining({
+        destructive: false,
+        policyAction: "ensure.service",
+        rawSudo: false,
+      }),
     );
   });
 
@@ -251,6 +271,12 @@ describe("createEnsureService", () => {
       "session-1",
       expectedCommand,
       "secret",
+      undefined,
+      undefined,
+      expect.objectContaining({
+        policyAction: "ensure.service",
+        rawSudo: false,
+      }),
     );
   });
 
@@ -281,6 +307,13 @@ describe("createEnsureService", () => {
       "session-1",
       expect.stringContaining("mv "),
       "secret",
+      undefined,
+      undefined,
+      expect.objectContaining({
+        path: "/tmp/demo",
+        policyAction: "ensure.lines",
+        rawSudo: false,
+      }),
     );
   });
 
@@ -363,6 +396,13 @@ describe("createEnsureService", () => {
       "session-1",
       expect.stringContaining("patch -p0"),
       "secret",
+      undefined,
+      undefined,
+      expect.objectContaining({
+        path: "C:/Temp/demo.txt",
+        policyAction: "patch.apply",
+        rawSudo: false,
+      }),
     );
     expect(deps.processService.execCommand).toHaveBeenLastCalledWith(
       "session-1",
@@ -419,6 +459,13 @@ describe("createEnsureService", () => {
       "session-1",
       "chkconfig nginx off || update-rc.d nginx disable",
       "secret",
+      undefined,
+      undefined,
+      expect.objectContaining({
+        destructive: true,
+        policyAction: "ensure.service",
+        rawSudo: false,
+      }),
     );
   });
 

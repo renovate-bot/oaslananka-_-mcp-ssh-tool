@@ -1,8 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
+import { createHash } from "node:crypto";
 import type { SFTPWrapper, Stats } from "ssh2";
 import { createFilesystemError } from "./errors.js";
 import { logger } from "./logging.js";
+import type { MetricsCollector } from "./metrics.js";
+import type { PolicyEngine } from "./policy.js";
 import type { SessionManager } from "./session.js";
 
 export interface TransferProgress {
@@ -25,6 +28,8 @@ export interface TransferResult {
   size: number;
   durationMs: number;
   averageSpeed: number;
+  sha256: string;
+  verified: boolean;
 }
 
 export interface TransferService {
@@ -42,6 +47,12 @@ export interface TransferService {
 
 export interface TransferServiceDeps {
   sessionManager: Pick<SessionManager, "getSession">;
+  metrics: Pick<MetricsCollector, "recordTransfer">;
+  policy: Pick<PolicyEngine, "assertAllowed">;
+}
+
+function sha256(data: Buffer): string {
+  return createHash("sha256").update(data).digest("hex");
 }
 
 function sftpWriteFile(sftp: SFTPWrapper, remotePath: string, data: Buffer): Promise<void> {
@@ -80,7 +91,11 @@ function sftpStat(sftp: SFTPWrapper, remotePath: string): Promise<Stats> {
   });
 }
 
-export function createTransferService({ sessionManager }: TransferServiceDeps): TransferService {
+export function createTransferService({
+  sessionManager,
+  metrics,
+  policy,
+}: TransferServiceDeps): TransferService {
   async function uploadFileWithProgress(
     localPath: string,
     remotePath: string,
@@ -102,6 +117,23 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
       throw createFilesystemError("SFTP subsystem is unavailable for this session");
     }
 
+    const decision = policy.assertAllowed({
+      action: "transfer.upload",
+      path: remotePath,
+      mode: session.info.policyMode,
+    });
+    if (decision.mode === "explain") {
+      return {
+        success: true,
+        filename: path.basename(localPath),
+        size: 0,
+        durationMs: 0,
+        averageSpeed: 0,
+        sha256: "",
+        verified: false,
+      };
+    }
+
     const startTime = Date.now();
     const filename = path.basename(localPath);
 
@@ -109,8 +141,18 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
       const stats = await fs.promises.stat(localPath);
       const totalSize = stats.size;
       const fileContent = await fs.promises.readFile(localPath);
+      const localSha256 = sha256(fileContent);
 
       await sftpWriteFile(session.sftp, remotePath, fileContent);
+      const remoteContent = await sftpReadFile(session.sftp, remotePath);
+      const remoteSha256 = sha256(remoteContent);
+      const verified = localSha256 === remoteSha256;
+      if (!verified) {
+        throw createFilesystemError(
+          `Transfer verification failed for ${remotePath}`,
+          "Remote SHA-256 does not match the local file after upload",
+        );
+      }
 
       if (onProgress) {
         const elapsed = (Date.now() - startTime) / 1000 || 1;
@@ -133,7 +175,9 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
         size: totalSize,
         durationMs,
         averageSpeed,
+        sha256: localSha256,
       });
+      metrics.recordTransfer("upload", totalSize);
 
       return {
         success: true,
@@ -141,6 +185,8 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
         size: totalSize,
         durationMs,
         averageSpeed,
+        sha256: localSha256,
+        verified,
       };
     } catch (error) {
       logger.error("File upload failed", { sessionId, localPath, error });
@@ -169,6 +215,23 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
       throw createFilesystemError("SFTP subsystem is unavailable for this session");
     }
 
+    const decision = policy.assertAllowed({
+      action: "transfer.download",
+      path: remotePath,
+      mode: session.info.policyMode,
+    });
+    if (decision.mode === "explain") {
+      return {
+        success: true,
+        filename: path.basename(remotePath),
+        size: 0,
+        durationMs: 0,
+        averageSpeed: 0,
+        sha256: "",
+        verified: false,
+      };
+    }
+
     const startTime = Date.now();
     const filename = path.basename(remotePath);
 
@@ -176,7 +239,20 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
       const stats = await sftpStat(session.sftp, remotePath);
       const totalSize = stats.size ?? 0;
       const data = await sftpReadFile(session.sftp, remotePath);
-      await fs.promises.writeFile(localPath, data);
+      const remoteSha256 = sha256(data);
+      const tempLocalPath = `${localPath}.tmp.${Date.now()}`;
+      await fs.promises.writeFile(tempLocalPath, data);
+      const localData = await fs.promises.readFile(tempLocalPath);
+      const localSha256 = sha256(localData);
+      const verified = remoteSha256 === localSha256;
+      if (!verified) {
+        await fs.promises.rm(tempLocalPath, { force: true });
+        throw createFilesystemError(
+          `Transfer verification failed for ${remotePath}`,
+          "Local SHA-256 does not match the remote file after download",
+        );
+      }
+      await fs.promises.rename(tempLocalPath, localPath);
 
       if (onProgress) {
         const elapsed = (Date.now() - startTime) / 1000 || 1;
@@ -199,7 +275,9 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
         size: totalSize,
         durationMs,
         averageSpeed,
+        sha256: remoteSha256,
       });
+      metrics.recordTransfer("download", totalSize);
 
       return {
         success: true,
@@ -207,6 +285,8 @@ export function createTransferService({ sessionManager }: TransferServiceDeps): 
         size: totalSize,
         durationMs,
         averageSpeed,
+        sha256: remoteSha256,
+        verified,
       };
     } catch (error) {
       logger.error("File download failed", { sessionId, remotePath, error });

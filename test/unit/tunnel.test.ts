@@ -1,15 +1,26 @@
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 import { createTunnelService } from "../../src/tunnel.js";
+import { createAllowPolicy, createSessionInfo, createTunnelMetrics } from "./helpers.js";
 
 describe("createTunnelService", () => {
   test("creates, lists, and closes tunnels", async () => {
+    const dispose = jest.fn(async () => undefined);
     const service = createTunnelService({
       sessionManager: {
-        getSession: () => ({ ssh: {} }) as any,
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            ssh: {
+              forwardIn: jest.fn(async (_host: string, port: number) => ({ port, dispose })),
+              forwardOut: jest.fn(),
+            },
+          }) as any,
       },
+      metrics: createTunnelMetrics(),
+      policy: createAllowPolicy(),
     });
 
-    const local = await service.createLocalForward("session-1", 8080, "db", 5432);
+    const local = await service.createLocalForward("session-1", 0, "db", 5432);
     const remote = await service.createRemoteForward("session-1", 9000, "localhost", 3000);
 
     expect(service.listTunnels()).toHaveLength(2);
@@ -23,6 +34,8 @@ describe("createTunnelService", () => {
       sessionManager: {
         getSession: () => undefined,
       },
+      metrics: createTunnelMetrics(),
+      policy: createAllowPolicy(),
     });
 
     await expect(service.createLocalForward("missing", 8080, "db", 5432)).rejects.toThrow(

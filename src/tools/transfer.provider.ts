@@ -2,6 +2,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { logger } from "../logging.js";
 import type { TransferService } from "../transfer.js";
 import { FileDownloadSchema, FileUploadSchema } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface TransferToolProviderDeps {
@@ -18,6 +19,13 @@ export class TransferToolProvider implements ToolProvider {
       {
         name: "file_upload",
         description: "Uploads a local file to the remote host over SFTP",
+        annotations: annotate({
+          title: "Upload File",
+          readOnly: false,
+          destructive: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Upload result with integrity details"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -31,6 +39,12 @@ export class TransferToolProvider implements ToolProvider {
       {
         name: "file_download",
         description: "Downloads a remote file to the local machine over SFTP",
+        annotations: annotate({
+          title: "Download File",
+          readOnly: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Download result with integrity details"),
         inputSchema: {
           type: "object" as const,
           properties: {

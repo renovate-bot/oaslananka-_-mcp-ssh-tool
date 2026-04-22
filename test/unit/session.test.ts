@@ -58,11 +58,15 @@ describe("SessionManager", () => {
 
     jest.spyOn(NodeSSH.prototype, "dispose").mockImplementation(() => undefined);
 
-    manager = new SessionManager(2, 1000, 10000);
+    manager = new SessionManager(2, 1000, 10000, {
+      allowRootLogin: false,
+      allowedCiphers: [],
+      hostKeyPolicy: "strict",
+      knownHostsPath: "/tmp/known_hosts",
+    });
   });
 
   afterEach(async () => {
-    delete process.env.STRICT_HOST_KEY_CHECKING;
     delete process.env.KNOWN_HOSTS_PATH;
     delete process.env.SSH_AUTH_SOCK;
     delete process.env.SSH_DEFAULT_KEY_DIR;
@@ -73,9 +77,6 @@ describe("SessionManager", () => {
   });
 
   test("opens and closes password-authenticated sessions", async () => {
-    process.env.STRICT_HOST_KEY_CHECKING = "true";
-    process.env.KNOWN_HOSTS_PATH = "/tmp/known_hosts";
-
     const result = await manager.openSession({
       host: "example.com",
       username: "demo",
@@ -102,6 +103,55 @@ describe("SessionManager", () => {
 
     await expect(manager.closeSession(result.sessionId)).resolves.toBe(true);
     expect(session?.ssh.dispose).toHaveBeenCalled();
+  });
+
+  test("supports fingerprint pinning and explain-mode root denial", async () => {
+    const pinned = await manager.openSession({
+      host: "pinned.example",
+      username: "demo",
+      password: "secret",
+      auth: "password",
+      expectedHostKeySha256: "SHA256:abc123",
+    });
+    const connectConfig = (
+      manager.getSession(pinned.sessionId)?.ssh as NodeSSH & {
+        __connectConfig?: Record<string, unknown>;
+      }
+    ).__connectConfig;
+
+    expect(connectConfig).toEqual(
+      expect.objectContaining({
+        hostHash: "sha256",
+        hostVerifier: expect.any(Function),
+      }),
+    );
+    expect((connectConfig?.hostVerifier as (fingerprint: string) => boolean)("abc123")).toBe(true);
+    expect((connectConfig?.hostVerifier as (fingerprint: string) => boolean)("different")).toBe(
+      false,
+    );
+
+    await expect(
+      manager.openSession({
+        host: "root.example",
+        username: "root",
+        password: "secret",
+        auth: "password",
+      }),
+    ).rejects.toMatchObject({ code: "EPOLICY" });
+
+    await expect(
+      manager.openSession({
+        host: "root.example",
+        username: "root",
+        password: "secret",
+        auth: "password",
+        policyMode: "explain",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        wouldConnect: false,
+      }),
+    );
   });
 
   test("supports key and agent authentication paths", async () => {

@@ -1,5 +1,12 @@
 import { describe, expect, jest, test } from "@jest/globals";
 import { createFsService } from "../../src/fs-tools.js";
+import { ErrorCode } from "../../src/types.js";
+import {
+  createAllowPolicy,
+  createFileMetrics,
+  createSessionInfo,
+  createTestConfig,
+} from "./helpers.js";
 
 function createLinuxOSInfo() {
   return {
@@ -18,6 +25,11 @@ describe("createFsService", () => {
   test("uses SSH fallback for basic file operations", async () => {
     const execCommand: any = jest.fn();
     execCommand
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: "file\t5\t1700000000\t644",
+        stderr: "",
+      })
       .mockResolvedValueOnce({ code: 0, stdout: "hello", stderr: "" })
       .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({
@@ -33,16 +45,15 @@ describe("createFsService", () => {
       .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" });
-    const metrics = {
-      recordFileRead: jest.fn(),
-      recordFileWrite: jest.fn(),
-    };
+    const metrics = createFileMetrics();
     const service = createFsService({
       sessionManager: {
-        getSession: () => ({ ssh: { execCommand } }) as any,
+        getSession: () => ({ info: createSessionInfo(), ssh: { execCommand } }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
+      config: createTestConfig(),
       metrics,
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.readFile("session-1", "/tmp/demo.txt")).resolves.toBe("hello");
@@ -88,6 +99,7 @@ describe("createFsService", () => {
         getSession: () =>
           ({
             ssh: { execCommand: jest.fn() },
+            info: createSessionInfo(),
             sftp: {
               readFile: (_path: string, callback: (err: Error | null, data: Buffer) => void) =>
                 callback(null, Buffer.from("hello")),
@@ -107,6 +119,10 @@ describe("createFsService", () => {
                   stats: { mode?: number; size?: number; mtime?: number },
                 ) => void,
               ) => {
+                if (filePath === "/tmp/demo.txt") {
+                  callback(null, { mode: 0o100644, size: 5, mtime: 1700000000 });
+                  return;
+                }
                 if (filePath === "/root") {
                   callback(null, { mode: 0o040755 });
                   return;
@@ -159,10 +175,9 @@ describe("createFsService", () => {
           }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.readFile("session-1", "/tmp/demo.txt")).resolves.toBe("hello");
@@ -192,18 +207,51 @@ describe("createFsService", () => {
     execCommand.mockResolvedValue({ code: 1, stdout: "", stderr: "nope" });
     const service = createFsService({
       sessionManager: {
-        getSession: () => ({ ssh: { execCommand } }) as any,
+        getSession: () => ({ info: createSessionInfo(), ssh: { execCommand } }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.pathExists("session-1", "/missing")).resolves.toBe(false);
     await expect(service.isDirectory("session-1", "/missing")).resolves.toBe(false);
     await expect(service.isFile("session-1", "/missing")).resolves.toBe(false);
+  });
+
+  test("enforces configured file-size limits before reading", async () => {
+    const readFile = jest.fn((_path: string, callback: (err: Error | null, data: Buffer) => void) =>
+      callback(null, Buffer.from("too large")),
+    );
+    const service = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            ssh: { execCommand: jest.fn() },
+            sftp: {
+              readFile,
+              stat: (
+                _path: string,
+                callback: (
+                  err: Error | null,
+                  stats: { mode?: number; size?: number; mtime?: number },
+                ) => void,
+              ) => callback(null, { mode: 0o100644, size: 128, mtime: 1700000000 }),
+            },
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: { maxFileSize: 8 },
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(service.readFile("session-1", "/tmp/large.log")).rejects.toMatchObject({
+      code: ErrorCode.ELIMIT,
+    });
+    expect(readFile).not.toHaveBeenCalled();
   });
 
   test("handles missing sessions and successful path helpers", async () => {
@@ -212,10 +260,9 @@ describe("createFsService", () => {
         getSession: () => undefined,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.readFile("missing", "/tmp/demo")).rejects.toThrow(
@@ -230,13 +277,12 @@ describe("createFsService", () => {
     });
     const activeService = createFsService({
       sessionManager: {
-        getSession: () => ({ ssh: { execCommand } }) as any,
+        getSession: () => ({ info: createSessionInfo(), ssh: { execCommand } }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(activeService.pathExists("session-1", "/tmp/demo")).resolves.toBe(true);
@@ -253,6 +299,7 @@ describe("createFsService", () => {
         getSession: () =>
           ({
             ssh: { execCommand: jest.fn() },
+            info: createSessionInfo(),
             sftp: {
               writeFile: (
                 _path: string,
@@ -265,10 +312,9 @@ describe("createFsService", () => {
           }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.writeFile("session-1", "/tmp/demo", "data")).rejects.toMatchObject({
@@ -332,6 +378,7 @@ describe("createFsService", () => {
         getSession: () =>
           ({
             ssh: { execCommand: jest.fn() },
+            info: createSessionInfo(),
             sftp: {
               stat,
               unlink,
@@ -355,10 +402,9 @@ describe("createFsService", () => {
           }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.statFile("session-1", "/tmp/dir")).resolves.toEqual(
@@ -382,6 +428,7 @@ describe("createFsService", () => {
         getSession: () =>
           ({
             ssh: { execCommand: jest.fn() },
+            info: createSessionInfo(),
             sftp: {
               readFile: (_path: string, callback: (err: Error | null, data: Buffer) => void) =>
                 callback(new Error("read failed"), Buffer.alloc(0)),
@@ -400,10 +447,9 @@ describe("createFsService", () => {
           }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      metrics: {
-        recordFileRead: jest.fn(),
-        recordFileWrite: jest.fn(),
-      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
     } as any);
 
     await expect(service.readFile("session-1", "/tmp/demo")).rejects.toMatchObject({ code: "EFS" });

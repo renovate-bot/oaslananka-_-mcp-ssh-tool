@@ -3,6 +3,7 @@ import { logger } from "../logging.js";
 import type { MetricsCollector } from "../metrics.js";
 import type { SessionManager } from "../session.js";
 import { MetricsFormatSchema, SessionIdSchema } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface SystemToolProviderDeps {
@@ -20,6 +21,12 @@ export class SystemToolProvider implements ToolProvider {
       {
         name: "os_detect",
         description: "Detects operating system and environment information",
+        annotations: annotate({
+          title: "Detect Remote OS",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Remote operating system information"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -32,6 +39,13 @@ export class SystemToolProvider implements ToolProvider {
         name: "get_metrics",
         description:
           "Returns server metrics including session counts, command statistics, and uptime",
+        annotations: annotate({
+          title: "Get Runtime Metrics",
+          readOnly: true,
+          idempotent: true,
+          openWorld: false,
+        }),
+        outputSchema: objectOutputSchema("Runtime metrics"),
         inputSchema: {
           type: "object" as const,
           properties: {

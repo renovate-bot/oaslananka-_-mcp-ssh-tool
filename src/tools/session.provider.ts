@@ -4,6 +4,7 @@ import type { MetricsCollector } from "../metrics.js";
 import type { SessionManager } from "../session.js";
 import { getConfiguredHosts, resolveSSHHost } from "../ssh-config.js";
 import { ConnectionParamsSchema, HostAliasSchema, SessionIdSchema } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface SessionToolProviderDeps {
@@ -21,6 +22,13 @@ export class SessionToolProvider implements ToolProvider {
       {
         name: "ssh_open_session",
         description: "Opens a new SSH session with authentication",
+        annotations: annotate({
+          title: "Open SSH Session",
+          readOnly: false,
+          destructive: false,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Session creation result or explain-mode connection plan"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -62,11 +70,25 @@ export class SessionToolProvider implements ToolProvider {
             },
             strictHostKeyChecking: {
               type: "boolean",
-              description: "Enable strict SSH host key checking",
+              description: "Deprecated alias. Prefer hostKeyPolicy.",
+            },
+            hostKeyPolicy: {
+              type: "string",
+              enum: ["strict", "accept-new", "insecure"],
+              description: "SSH host key verification policy (default: strict)",
             },
             knownHostsPath: {
               type: "string",
               description: "Path to known_hosts file",
+            },
+            expectedHostKeySha256: {
+              type: "string",
+              description: "Pinned SHA-256 host key fingerprint, with or without SHA256: prefix",
+            },
+            policyMode: {
+              type: "string",
+              enum: ["enforce", "explain"],
+              description: "Use explain to return the planned connection without opening SSH",
             },
           },
           required: ["host", "username"],
@@ -75,6 +97,13 @@ export class SessionToolProvider implements ToolProvider {
       {
         name: "ssh_close_session",
         description: "Closes an SSH session",
+        annotations: annotate({
+          title: "Close SSH Session",
+          readOnly: false,
+          destructive: false,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Boolean close result wrapped as structured content"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -86,6 +115,12 @@ export class SessionToolProvider implements ToolProvider {
       {
         name: "ssh_list_sessions",
         description: "Lists all active SSH sessions with their details",
+        annotations: annotate({
+          title: "List SSH Sessions",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Active SSH sessions"),
         inputSchema: {
           type: "object" as const,
           properties: {},
@@ -95,6 +130,12 @@ export class SessionToolProvider implements ToolProvider {
       {
         name: "ssh_ping",
         description: "Checks if an SSH session is still alive and responsive",
+        annotations: annotate({
+          title: "Ping SSH Session",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Session health check result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -109,6 +150,13 @@ export class SessionToolProvider implements ToolProvider {
       {
         name: "ssh_list_configured_hosts",
         description: "Lists all hosts configured in ~/.ssh/config",
+        annotations: annotate({
+          title: "List Configured Hosts",
+          readOnly: true,
+          idempotent: true,
+          openWorld: false,
+        }),
+        outputSchema: objectOutputSchema("Configured SSH host aliases"),
         inputSchema: {
           type: "object" as const,
           properties: {},
@@ -118,6 +166,13 @@ export class SessionToolProvider implements ToolProvider {
       {
         name: "ssh_resolve_host",
         description: "Resolves a host alias from ~/.ssh/config to connection parameters",
+        annotations: annotate({
+          title: "Resolve SSH Host",
+          readOnly: true,
+          idempotent: true,
+          openWorld: false,
+        }),
+        outputSchema: objectOutputSchema("Resolved SSH connection parameters"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -241,7 +296,8 @@ export class SessionToolProvider implements ToolProvider {
     auth: "auto" | "password" | "key" | "agent";
     readyTimeoutMs: number;
     ttlMs: number;
-    strictHostKeyChecking: boolean;
+    strictHostKeyChecking?: boolean | undefined;
+    hostKeyPolicy?: "strict" | "accept-new" | "insecure" | undefined;
     port?: number | undefined;
     password?: string | undefined;
     privateKey?: string | undefined;
@@ -249,6 +305,8 @@ export class SessionToolProvider implements ToolProvider {
     passphrase?: string | undefined;
     useAgent?: boolean | undefined;
     knownHostsPath?: string | undefined;
+    expectedHostKeySha256?: string | undefined;
+    policyMode: "enforce" | "explain";
   }) {
     return {
       host: params.host,
@@ -256,14 +314,21 @@ export class SessionToolProvider implements ToolProvider {
       auth: params.auth,
       readyTimeoutMs: params.readyTimeoutMs,
       ttlMs: params.ttlMs,
-      strictHostKeyChecking: params.strictHostKeyChecking,
+      policyMode: params.policyMode,
       ...(params.port !== undefined ? { port: params.port } : {}),
+      ...(params.strictHostKeyChecking !== undefined
+        ? { strictHostKeyChecking: params.strictHostKeyChecking }
+        : {}),
+      ...(params.hostKeyPolicy ? { hostKeyPolicy: params.hostKeyPolicy } : {}),
       ...(params.password ? { password: params.password } : {}),
       ...(params.privateKey ? { privateKey: params.privateKey } : {}),
       ...(params.privateKeyPath ? { privateKeyPath: params.privateKeyPath } : {}),
       ...(params.passphrase ? { passphrase: params.passphrase } : {}),
       ...(params.useAgent !== undefined ? { useAgent: params.useAgent } : {}),
       ...(params.knownHostsPath ? { knownHostsPath: params.knownHostsPath } : {}),
+      ...(params.expectedHostKeySha256
+        ? { expectedHostKeySha256: params.expectedHostKeySha256 }
+        : {}),
     };
   }
 }

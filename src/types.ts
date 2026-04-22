@@ -27,8 +27,14 @@ export interface ConnectionParams {
   readyTimeoutMs?: number;
   ttlMs?: number;
   strictHostKeyChecking?: boolean;
+  hostKeyPolicy?: HostKeyPolicy;
   knownHostsPath?: string;
+  expectedHostKeySha256?: string;
+  policyMode?: PolicyMode;
 }
+
+export type HostKeyPolicy = "strict" | "accept-new" | "insecure";
+export type PolicyMode = "enforce" | "explain";
 
 /**
  * SSH session information
@@ -41,6 +47,8 @@ export interface SessionInfo {
   createdAt: number;
   expiresAt: number;
   lastUsed: number;
+  policyMode: PolicyMode;
+  hostKeyPolicy: HostKeyPolicy;
 }
 
 /**
@@ -52,6 +60,9 @@ export interface SessionResult {
   username: string;
   sftpAvailable: boolean;
   expiresInMs: number;
+  policyMode: PolicyMode;
+  hostKeyPolicy: HostKeyPolicy;
+  wouldConnect?: boolean;
 }
 
 /**
@@ -172,6 +183,10 @@ export enum ErrorCode {
   EFS = "EFS",
   EPATCH = "EPATCH",
   EBADREQ = "EBADREQ",
+  EPOLICY = "EPOLICY",
+  EHOSTKEY = "EHOSTKEY",
+  ELIMIT = "ELIMIT",
+  EUNSUPPORTED = "EUNSUPPORTED",
 }
 
 /**
@@ -219,8 +234,11 @@ export const ConnectionParamsSchema = z.object({
   useAgent: z.boolean().optional(),
   readyTimeoutMs: z.number().min(1000).optional().default(20000),
   ttlMs: z.number().min(10000).optional().default(900000),
-  strictHostKeyChecking: z.boolean().optional().default(false),
+  strictHostKeyChecking: z.boolean().optional(),
+  hostKeyPolicy: z.enum(["strict", "accept-new", "insecure"]).optional().default("strict"),
   knownHostsPath: z.string().optional(),
+  expectedHostKeySha256: z.string().optional(),
+  policyMode: z.enum(["enforce", "explain"]).optional().default("enforce"),
 });
 
 export const SessionIdSchema = z.object({
@@ -247,6 +265,7 @@ export const FSReadSchema = z.object({
   sessionId: z.string().min(1),
   path: z.string().min(1),
   encoding: z.string().optional().default("utf8"),
+  maxBytes: z.number().int().min(1).optional(),
 });
 
 export const FSWriteSchema = z.object({
@@ -322,6 +341,7 @@ export const ExecStreamSchema = z.object({
   command: z.string().min(1),
   cwd: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
+  timeoutMs: z.number().min(1000).optional().describe("Streaming command timeout in milliseconds"),
 });
 
 export const FileUploadSchema = z.object({

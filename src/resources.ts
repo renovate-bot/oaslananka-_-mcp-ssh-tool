@@ -33,6 +33,24 @@ const RESOURCE_DEFINITIONS: readonly MCPResource[] = [
     description: "Parsed host aliases from the local ~/.ssh/config cache",
     mimeType: "application/json",
   },
+  {
+    uri: "mcp-ssh-tool://policy/effective",
+    name: "Effective safety policy",
+    description: "Current command, path, host, and privilege policy after env/file overrides",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mcp-ssh-tool://audit/recent",
+    name: "Recent audit events",
+    description: "Recent policy and high-risk operation audit events",
+    mimeType: "application/json",
+  },
+  {
+    uri: "mcp-ssh-tool://capabilities/support-matrix",
+    name: "Support matrix",
+    description: "Supported and experimental host capabilities for this server",
+    mimeType: "application/json",
+  },
 ] as const;
 
 export function listResources(): { resources: MCPResource[] } {
@@ -61,6 +79,17 @@ export async function readResource(
     case "mcp-ssh-tool://ssh-config/hosts":
       return jsonResource(uri, "application/json", {
         hosts: await getConfiguredHosts(),
+      });
+    case "mcp-ssh-tool://policy/effective":
+      return jsonResource(uri, "application/json", container.policy.getEffectivePolicy());
+    case "mcp-ssh-tool://audit/recent":
+      return jsonResource(uri, "application/json", { events: container.auditLog.list(100) });
+    case "mcp-ssh-tool://capabilities/support-matrix":
+      return jsonResource(uri, "application/json", {
+        linux: "full",
+        macos: "session/process/fs/transfer; package/service helpers limited to tested managers",
+        "BusyBox/dropbear": "experimental: session/process/basic fs without SFTP",
+        windows: "experimental: session/process/fs/transfer; sudo and ensure tools unsupported",
       });
     default:
       throw new Error(`Unknown resource: ${uri}`);

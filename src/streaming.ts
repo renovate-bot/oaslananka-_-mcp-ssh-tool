@@ -1,6 +1,9 @@
 import { logger } from "./logging.js";
+import { createTimeoutError } from "./errors.js";
 import { buildRemoteCommand } from "./shell.js";
+import type { PolicyEngine } from "./policy.js";
 import type { SessionManager } from "./session.js";
+import type { ServerConfig } from "./config.js";
 
 export interface StreamChunk {
   type: "stdout" | "stderr" | "exit";
@@ -14,6 +17,7 @@ export interface StreamOptions {
   command: string;
   cwd?: string;
   env?: Record<string, string>;
+  timeoutMs?: number;
   onChunk?: (chunk: StreamChunk) => void;
 }
 
@@ -31,9 +35,15 @@ export interface StreamingService {
 
 export interface StreamingServiceDeps {
   sessionManager: Pick<SessionManager, "getSession" | "getOSInfo">;
+  config: Pick<ServerConfig, "commandTimeoutMs">;
+  policy: Pick<PolicyEngine, "assertAllowed">;
 }
 
-export function createStreamingService({ sessionManager }: StreamingServiceDeps): StreamingService {
+export function createStreamingService({
+  sessionManager,
+  config,
+  policy,
+}: StreamingServiceDeps): StreamingService {
   async function execWithStreaming(options: StreamOptions): Promise<StreamResult> {
     const { sessionId, command, cwd, env, onChunk } = options;
     logger.debug("Starting streaming execution", { sessionId, command });
@@ -41,6 +51,21 @@ export function createStreamingService({ sessionManager }: StreamingServiceDeps)
     const session = sessionManager.getSession(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found or expired`);
+    }
+
+    const decision = policy.assertAllowed({
+      action: "proc.exec",
+      command,
+      mode: session.info.policyMode,
+    });
+    if (decision.mode === "explain") {
+      return {
+        code: 0,
+        chunks: [],
+        stdout: JSON.stringify({ wouldExecute: true, command, policy: decision }, null, 2),
+        stderr: "",
+        durationMs: 0,
+      };
     }
 
     const osInfo = await sessionManager.getOSInfo(sessionId);
@@ -51,6 +76,14 @@ export function createStreamingService({ sessionManager }: StreamingServiceDeps)
 
     return new Promise((resolve, reject) => {
       const shellCommand = buildRemoteCommand(command, osInfo, cwd, env);
+      const timeout = setTimeout(() => {
+        reject(
+          createTimeoutError(
+            `Streaming command timed out after ${options.timeoutMs ?? config.commandTimeoutMs}ms`,
+            "Increase timeout or use a shorter streaming command.",
+          ),
+        );
+      }, options.timeoutMs ?? config.commandTimeoutMs);
 
       session.ssh
         .execCommand(shellCommand, {
@@ -80,6 +113,7 @@ export function createStreamingService({ sessionManager }: StreamingServiceDeps)
           },
         })
         .then((result) => {
+          clearTimeout(timeout);
           const exitChunk: StreamChunk = {
             type: "exit",
             code: result.code ?? 0,
@@ -105,7 +139,10 @@ export function createStreamingService({ sessionManager }: StreamingServiceDeps)
 
           resolve(streamResult);
         })
-        .catch(reject);
+        .catch((error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
     });
   }
 

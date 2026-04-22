@@ -1,159 +1,77 @@
-# MCP-SSH-Tool Examples
+# mcp-ssh-tool Examples
 
-This directory contains example use cases for the SSH MCP server.
+These examples are written for v2 secure defaults. Start with discovery, open one session per host, inspect capabilities, then prefer structured tools over raw shell commands.
 
-## Basic Connection
+## Safe Connection
 
-### Connect with Password
-
-```
-"Connect to 192.168.1.100 as admin with password 'mypassword'"
+```text
+Use the safe-connect prompt. Connect to prod-1.example.com as deploy with hostKeyPolicy=strict, then list active sessions.
 ```
 
-### Connect with SSH Key
+For a lab host that is not in `known_hosts` yet:
 
-```
-"Connect to server.example.com as deploy using SSH key"
-```
-
-### Connect Using SSH Config Alias
-
-```
-"Resolve host alias 'production' from SSH config, then connect"
+```text
+Open a session to lab-router as admin with hostKeyPolicy=accept-new, then run os_detect.
 ```
 
-## Remote Command Execution
+## Explain Before Mutating
 
-### Basic Commands
-
-```
-"Run 'uname -a' on the server"
-"Execute 'df -h' to check disk usage"
-"Check memory usage with 'free -m'"
+```text
+Open a session to web-1 as deploy with policyMode=explain. Plan how you would update /etc/nginx/nginx.conf to add gzip settings, including policy verdicts and rollback.
 ```
 
-### Commands with Working Directory
+## Read And Inspect
 
-```
-"Run 'ls -la' in /var/www directory"
-"Execute 'git status' in /home/deploy/app"
-```
-
-### Commands with Timeout
-
-```
-"Run 'find / -name *.log' with 30 second timeout"
+```text
+Connect to web-1 as deploy, run os_detect, read mcp-ssh-tool://policy/effective, then show df -h and uptime.
 ```
 
 ## File Operations
 
-### Reading Files
-
-```
-"Read /etc/nginx/nginx.conf"
-"Show contents of /var/log/syslog"
+```text
+Read /etc/nginx/nginx.conf with fs_read. If it is larger than the read limit, use file_download instead.
 ```
 
-### Writing Files
-
-```
-"Create file /tmp/test.txt with content 'Hello World'"
-"Write configuration to /etc/myapp/config.ini"
+```text
+List /var/log with fs_list, then read the newest nginx error log if it is within the configured file-size limit.
 ```
 
-### Directory Operations
+## Managed Configuration Change
 
-```
-"List files in /var/www"
-"Create directory /opt/myapp/logs"
-"Remove /tmp/old-files recursively"
+```text
+Use the managed-config-change prompt for /etc/ssh/sshd_config. Read the file, propose a minimal unified diff, dry-run the patch, then apply only if policy allows it.
 ```
 
-## System Administration
+## Package And Service Management
 
-### Package Management
+Prefer idempotent tools:
 
-```
-"Install nginx package"
-"Ensure htop is installed"
-```
-
-### Service Management
-
-```
-"Start nginx service"
-"Restart postgresql service"
-"Enable docker service on boot"
+```text
+Ensure htop is present on the host, then report whether anything changed.
 ```
 
-### Configuration Management
-
-```
-"Add line 'MaxAuthTries 3' to /etc/ssh/sshd_config"
-"Ensure these hosts are in /etc/hosts:
-192.168.1.10 db-server
-192.168.1.20 cache-server"
+```text
+Ensure nginx is restarted only after checking policy and explaining the service impact.
 ```
 
-## Session Management
+## Transfers
 
-### List Sessions
-
-```
-"Show all active SSH sessions"
+```text
+Upload ./release.tar.gz to /tmp/release.tar.gz with file_upload and report the SHA-256 verification result.
 ```
 
-### Check Session Health
-
-```
-"Ping session ssh-123456789 to check if it's still connected"
+```text
+Download /var/log/app/app.log to ./app.log with file_download and confirm checksum verification.
 ```
 
-### Close Session
+## Tunnels
 
-```
-"Close SSH session ssh-123456789"
-```
-
-## OS Detection
-
-```
-"Detect operating system on the connected server"
+```text
+Create a local tunnel from localhost:15432 to remote database host db.internal:5432, list active tunnels, then close the tunnel when finished.
 ```
 
-This will return:
+## BusyBox/dropbear Targets
 
-- Distribution name and version
-- CPU architecture
-- Default shell
-- Package manager (apt, yum, dnf, pacman, apk)
-- Init system (systemd, service)
-
-## Complex Workflows
-
-### Deploy Application
-
-```
-1. "Connect to production-server as deploy"
-2. "Run 'cd /var/www/app && git pull origin main'"
-3. "Run 'npm install --production' in /var/www/app"
-4. "Restart pm2-app service"
-```
-
-### Server Health Check
-
-```
-1. "Connect to monitoring-target as admin"
-2. "Run 'uptime'"
-3. "Run 'df -h'"
-4. "Run 'free -m'"
-5. "Run 'systemctl status nginx'"
-```
-
-### Log Analysis
-
-```
-1. "Connect to log-server as analyst"
-2. "Run 'tail -n 100 /var/log/nginx/access.log'"
-3. "Run 'grep ERROR /var/log/app/error.log | tail -n 50'"
+```text
+Connect to my embedded host, inspect whether SFTP is available, then use fs_stat and fs_list on /tmp. If a helper is unsupported, explain the capability gap.
 ```

@@ -17,10 +17,14 @@ import { TunnelToolProvider } from "./tunnel.provider.js";
 export function createToolRegistry(container: AppContainer): ToolRegistry {
   const processService = createProcessService({
     sessionManager: container.sessionManager,
+    config: container.config.getAll(),
+    policy: container.policy,
   });
   const fsService = createFsService({
     sessionManager: container.sessionManager,
     metrics: container.metrics,
+    config: container.config.getAll(),
+    policy: container.policy,
   });
   const ensureService = createEnsureService({
     sessionManager: container.sessionManager,
@@ -29,12 +33,18 @@ export function createToolRegistry(container: AppContainer): ToolRegistry {
   });
   const streamingService = createStreamingService({
     sessionManager: container.sessionManager,
+    config: container.config.getAll(),
+    policy: container.policy,
   });
   const transferService = createTransferService({
     sessionManager: container.sessionManager,
+    metrics: container.metrics,
+    policy: container.policy,
   });
   const tunnelService = createTunnelService({
     sessionManager: container.sessionManager,
+    metrics: container.metrics,
+    policy: container.policy,
   });
 
   return new ToolRegistry()

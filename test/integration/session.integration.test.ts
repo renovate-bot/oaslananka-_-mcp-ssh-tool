@@ -22,12 +22,27 @@ integrationDescribe("SSH integration tests", () => {
     container = createContainer({
       security: {
         allowRootLogin: true,
-        requireHostKeyVerification: false,
+        hostKeyPolicy: "insecure",
+        knownHostsPath: "",
         allowedCiphers: [],
+      },
+      policy: {
+        mode: "enforce",
+        allowRawSudo: true,
+        allowDestructiveCommands: true,
+        allowDestructiveFs: true,
+        allowRootLogin: true,
+        allowedHosts: [],
+        commandAllow: [],
+        commandDeny: [],
+        pathAllowPrefixes: ["/tmp"],
+        pathDenyPrefixes: [],
       },
     });
     processService = createProcessService({
       sessionManager: container.sessionManager,
+      config: container.config.getAll(),
+      policy: container.policy,
     });
 
     const session = await container.sessionManager.openSession({
@@ -36,6 +51,7 @@ integrationDescribe("SSH integration tests", () => {
       username: TEST_SSH_USER,
       password: TEST_SSH_PASS,
       auth: "password",
+      hostKeyPolicy: "insecure",
     });
     sessionId = session.sessionId;
   });
@@ -63,6 +79,7 @@ integrationDescribe("SSH integration tests", () => {
         username: TEST_SSH_USER,
         password: "definitely-wrong-password",
         auth: "password",
+        hostKeyPolicy: "insecure",
       }),
     ).rejects.toMatchObject({
       code: "EAUTH",

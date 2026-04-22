@@ -9,6 +9,7 @@ import {
   FSStatSchema,
   FSWriteSchema,
 } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface FsToolProviderDeps {
@@ -25,6 +26,12 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_read",
         description: "Reads a file from the remote system",
+        annotations: annotate({
+          title: "Read Remote File",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Remote file content wrapped as structured content"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -34,6 +41,10 @@ export class FsToolProvider implements ToolProvider {
               type: "string",
               description: "File encoding (default: utf8)",
             },
+            maxBytes: {
+              type: "number",
+              description: "Optional per-request read size limit in bytes",
+            },
           },
           required: ["sessionId", "path"],
         },
@@ -41,6 +52,13 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_write",
         description: "Writes data to a file on the remote system",
+        annotations: annotate({
+          title: "Write Remote File",
+          readOnly: false,
+          destructive: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("File write result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -55,6 +73,12 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_stat",
         description: "Gets file or directory statistics",
+        annotations: annotate({
+          title: "Stat Remote Path",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Remote path stat result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -67,6 +91,12 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_list",
         description: "Lists directory contents",
+        annotations: annotate({
+          title: "List Remote Directory",
+          readOnly: true,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Remote directory entries"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -84,6 +114,13 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_mkdirp",
         description: "Creates directories recursively",
+        annotations: annotate({
+          title: "Create Remote Directories",
+          readOnly: false,
+          destructive: false,
+          idempotent: true,
+        }),
+        outputSchema: objectOutputSchema("Directory creation result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -96,6 +133,13 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_rmrf",
         description: "Removes files or directories recursively",
+        annotations: annotate({
+          title: "Remove Remote Path Recursively",
+          readOnly: false,
+          destructive: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Recursive remove result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -108,6 +152,13 @@ export class FsToolProvider implements ToolProvider {
       {
         name: "fs_rename",
         description: "Renames or moves a file/directory",
+        annotations: annotate({
+          title: "Rename Remote Path",
+          readOnly: false,
+          destructive: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Rename result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -148,6 +199,7 @@ export class FsToolProvider implements ToolProvider {
       params.sessionId,
       params.path,
       params.encoding,
+      params.maxBytes,
     );
     logger.info("File read", { sessionId: params.sessionId, path: params.path });
     return result;

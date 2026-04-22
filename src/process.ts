@@ -1,7 +1,9 @@
 import { createSudoError, wrapError, createTimeoutError } from "./errors.js";
 import { logger, createTimer } from "./logging.js";
+import type { PolicyAction, PolicyEngine } from "./policy.js";
 import type { SessionManager } from "./session.js";
 import { buildRemoteCommand, buildSudoCommand } from "./shell.js";
+import type { ServerConfig } from "./config.js";
 import type { ExecResult } from "./types.js";
 import { ErrorCode } from "./types.js";
 
@@ -19,6 +21,7 @@ export interface ProcessService {
     password?: string,
     cwd?: string,
     timeoutMs?: number,
+    policyOptions?: SudoPolicyOptions,
   ): Promise<ExecResult>;
   commandExists(sessionId: string, command: string): Promise<boolean>;
   getAvailableShell(sessionId: string): Promise<string>;
@@ -30,11 +33,47 @@ export interface ProcessService {
   ): Promise<ExecResult>;
 }
 
-export interface ProcessServiceDeps {
-  sessionManager: Pick<SessionManager, "getSession" | "getOSInfo">;
+export interface SudoPolicyOptions {
+  policyAction?: PolicyAction;
+  rawSudo?: boolean;
+  path?: string;
+  destructive?: boolean;
 }
 
-export function createProcessService({ sessionManager }: ProcessServiceDeps): ProcessService {
+export interface ProcessServiceDeps {
+  sessionManager: Pick<SessionManager, "getSession" | "getOSInfo">;
+  config: Pick<ServerConfig, "commandTimeoutMs">;
+  policy: Pick<PolicyEngine, "assertAllowed">;
+}
+
+async function execWithTimeout<T>(work: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(
+            createTimeoutError(
+              `${label} timed out after ${timeoutMs}ms`,
+              "Increase timeout or optimize the command",
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+export function createProcessService({
+  sessionManager,
+  config,
+  policy,
+}: ProcessServiceDeps): ProcessService {
   async function execCommand(
     sessionId: string,
     command: string,
@@ -49,27 +88,33 @@ export function createProcessService({ sessionManager }: ProcessServiceDeps): Pr
       throw new Error(`Session ${sessionId} not found or expired`);
     }
 
+    const decision = policy.assertAllowed({
+      action: "proc.exec",
+      command,
+      mode: session.info.policyMode,
+    });
+
+    if (decision.mode === "explain") {
+      return {
+        code: 0,
+        stdout: JSON.stringify({ wouldExecute: true, command, policy: decision }, null, 2),
+        stderr: "",
+        durationMs: 0,
+      };
+    }
+
     const osInfo = await sessionManager.getOSInfo(sessionId);
     const timer = createTimer();
+    const effectiveTimeoutMs = timeoutMs ?? config.commandTimeoutMs;
 
     try {
       const shellCommand = buildRemoteCommand(command, osInfo, cwd, env);
 
-      const result = timeoutMs
-        ? await Promise.race([
-            session.ssh.execCommand(shellCommand),
-            new Promise<never>((_, reject) => {
-              setTimeout(() => {
-                reject(
-                  createTimeoutError(
-                    `Command timed out after ${timeoutMs}ms`,
-                    "Increase timeout or optimize the command",
-                  ),
-                );
-              }, timeoutMs);
-            }),
-          ])
-        : await session.ssh.execCommand(shellCommand);
+      const result = await execWithTimeout(
+        session.ssh.execCommand(shellCommand),
+        effectiveTimeoutMs,
+        "Command",
+      );
 
       const execResult: ExecResult = {
         code: result.code ?? 0,
@@ -100,6 +145,7 @@ export function createProcessService({ sessionManager }: ProcessServiceDeps): Pr
     password?: string,
     cwd?: string,
     timeoutMs?: number,
+    policyOptions: SudoPolicyOptions = {},
   ): Promise<ExecResult> {
     logger.debug("Executing sudo command", {
       sessionId,
@@ -113,6 +159,30 @@ export function createProcessService({ sessionManager }: ProcessServiceDeps): Pr
       throw new Error(`Session ${sessionId} not found or expired`);
     }
 
+    const decision = policy.assertAllowed({
+      action: policyOptions.policyAction ?? "proc.sudo",
+      command,
+      mode: session.info.policyMode,
+      rawSudo: policyOptions.rawSudo ?? true,
+      ...(policyOptions.path ? { path: policyOptions.path } : {}),
+      ...(policyOptions.destructive !== undefined
+        ? { destructive: policyOptions.destructive }
+        : {}),
+    });
+
+    if (decision.mode === "explain") {
+      return {
+        code: 0,
+        stdout: JSON.stringify(
+          { wouldExecute: true, command, sudo: true, policy: decision },
+          null,
+          2,
+        ),
+        stderr: "",
+        durationMs: 0,
+      };
+    }
+
     const osInfo = await sessionManager.getOSInfo(sessionId);
     if (osInfo.platform === "windows") {
       throw createSudoError(
@@ -122,24 +192,15 @@ export function createProcessService({ sessionManager }: ProcessServiceDeps): Pr
     }
 
     const timer = createTimer();
+    const effectiveTimeoutMs = timeoutMs ?? config.commandTimeoutMs;
 
     try {
       const fullCommand = buildSudoCommand(command, osInfo, password, cwd);
-      const result = timeoutMs
-        ? await Promise.race([
-            session.ssh.execCommand(fullCommand),
-            new Promise<never>((_, reject) => {
-              setTimeout(() => {
-                reject(
-                  createTimeoutError(
-                    `Sudo command timed out after ${timeoutMs}ms`,
-                    "Increase timeout or optimize the command",
-                  ),
-                );
-              }, timeoutMs);
-            }),
-          ])
-        : await session.ssh.execCommand(fullCommand);
+      const result = await execWithTimeout(
+        session.ssh.execCommand(fullCommand),
+        effectiveTimeoutMs,
+        "Sudo command",
+      );
 
       if ((result.code ?? 0) !== 0 && result.stderr) {
         const stderrLower = result.stderr.toLowerCase();

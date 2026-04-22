@@ -43,7 +43,12 @@ export class ToolRegistry {
   getAllTools(): Tool[] {
     const tools: Tool[] = [];
     for (const provider of this.providers.values()) {
-      tools.push(...provider.getTools());
+      tools.push(
+        ...provider.getTools().map((tool) => ({
+          ...tool,
+          title: tool.title ?? tool.annotations?.title,
+        })),
+      );
     }
     return tools;
   }
@@ -60,8 +65,13 @@ export class ToolRegistry {
       try {
         const data = await result;
         const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        const structuredContent =
+          data && typeof data === "object" && !Array.isArray(data)
+            ? (data as Record<string, unknown>)
+            : { result: data };
         return {
           content: [{ type: "text", text }],
+          structuredContent,
         };
       } catch (error) {
         logger.error("Tool handler error", { toolName, error });

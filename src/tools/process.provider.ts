@@ -5,6 +5,7 @@ import type { ProcessService } from "../process.js";
 import { addSafetyWarningToResult } from "../safety.js";
 import type { StreamingService } from "../streaming.js";
 import { ExecSchema, ExecStreamSchema, SudoSchema } from "../types.js";
+import { annotate, objectOutputSchema } from "./metadata.js";
 import type { ToolProvider } from "./types.js";
 
 export interface ProcessToolProviderDeps {
@@ -22,7 +23,15 @@ export class ProcessToolProvider implements ToolProvider {
     return [
       {
         name: "proc_exec",
-        description: "Executes a command on the remote system",
+        description:
+          "Executes a non-interactive command on the remote system after policy and safety checks",
+        annotations: annotate({
+          title: "Execute Remote Command",
+          readOnly: false,
+          destructive: false,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Remote command result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -40,7 +49,15 @@ export class ProcessToolProvider implements ToolProvider {
       },
       {
         name: "proc_sudo",
-        description: "Executes a command with sudo privileges",
+        description:
+          "Executes a command with sudo privileges only when allowRawSudo policy permits it",
+        annotations: annotate({
+          title: "Execute Sudo Command",
+          readOnly: false,
+          destructive: true,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Remote sudo command result"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -62,6 +79,13 @@ export class ProcessToolProvider implements ToolProvider {
       {
         name: "proc_exec_stream",
         description: "Executes a command and returns streaming output chunks",
+        annotations: annotate({
+          title: "Execute Streaming Command",
+          readOnly: false,
+          destructive: false,
+          idempotent: false,
+        }),
+        outputSchema: objectOutputSchema("Streaming command result with output chunks"),
         inputSchema: {
           type: "object" as const,
           properties: {
@@ -69,6 +93,10 @@ export class ProcessToolProvider implements ToolProvider {
             command: { type: "string", description: "Command to execute" },
             cwd: { type: "string", description: "Working directory" },
             env: { type: "object", description: "Environment variables" },
+            timeoutMs: {
+              type: "number",
+              description: "Streaming command timeout in milliseconds",
+            },
           },
           required: ["sessionId", "command"],
         },
@@ -142,12 +170,14 @@ export class ProcessToolProvider implements ToolProvider {
     command: string;
     cwd?: string | undefined;
     env?: Record<string, string> | undefined;
+    timeoutMs?: number | undefined;
   }) {
     return {
       sessionId: params.sessionId,
       command: params.command,
       ...(params.cwd ? { cwd: params.cwd } : {}),
       ...(params.env ? { env: params.env } : {}),
+      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     };
   }
 }

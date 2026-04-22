@@ -1,12 +1,28 @@
 import { NodeSSH, type Config } from "node-ssh";
 import type { SFTPWrapper } from "ssh2";
+import { randomUUID } from "node:crypto";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { ConnectionParams, SessionInfo, SessionResult, OSInfo, SSHMCPError } from "./types.js";
-import { createAuthError, createConnectionError, createTimeoutError } from "./errors.js";
+import {
+  ConnectionParams,
+  SessionInfo,
+  SessionResult,
+  OSInfo,
+  SSHMCPError,
+  type HostKeyPolicy,
+} from "./types.js";
+import {
+  createAuthError,
+  createConnectionError,
+  createHostKeyError,
+  createPolicyError,
+  createTimeoutError,
+} from "./errors.js";
 import { logger } from "./logging.js";
 import { detectOS } from "./detect.js";
+import type { ServerConfig } from "./config.js";
+import type { PolicyEngine } from "./policy.js";
 
 /**
  * SSH session with connection and optional SFTP client.
@@ -29,7 +45,12 @@ interface SSHAuthConfig {
 
 type SSHConnectConfig = Config & {
   knownHosts?: string;
+  hostHash?: "md5" | "sha1" | "sha256";
 };
+
+function normalizeSha256Fingerprint(fingerprint: string): string {
+  return fingerprint.replace(/^SHA256:/i, "").trim();
+}
 
 /**
  * Session manager with LRU cache and TTL
@@ -38,10 +59,21 @@ export class SessionManager {
   private readonly sessions = new Map<string, SSHSession>();
   private readonly maxSessions: number;
   private readonly defaultTtlMs: number;
-  private sessionCounter = 0;
   private cleanupInterval: NodeJS.Timeout | undefined;
+  private readonly acceptedHostKeys = new Map<string, string>();
 
-  constructor(maxSessions = 20, defaultTtlMs = 900_000, cleanupIntervalMs = 10_000) {
+  constructor(
+    maxSessions = 20,
+    defaultTtlMs = 900_000,
+    cleanupIntervalMs = 10_000,
+    private readonly security: ServerConfig["security"] = {
+      allowRootLogin: false,
+      hostKeyPolicy: "strict",
+      knownHostsPath: path.join(os.homedir(), ".ssh", "known_hosts"),
+      allowedCiphers: [],
+    },
+    private readonly policy?: Pick<PolicyEngine, "assertAllowed">,
+  ) {
     this.maxSessions = maxSessions;
     this.defaultTtlMs = defaultTtlMs;
 
@@ -92,8 +124,38 @@ export class SessionManager {
     const sessionId = this.generateSessionId();
     const now = Date.now();
     const ttl = params.ttlMs ?? this.defaultTtlMs;
+    const policyMode = params.policyMode ?? "enforce";
+    const hostKeyPolicy = this.resolveHostKeyPolicy(params);
+
+    const policyDecision = this.policy?.assertAllowed({
+      action: "ssh.open",
+      host: params.host,
+      username: params.username,
+      mode: policyMode,
+    });
+    const rootDenied = params.username === "root" && !this.security.allowRootLogin;
+
+    if (policyMode === "explain") {
+      return {
+        sessionId,
+        host: params.host,
+        username: params.username,
+        sftpAvailable: false,
+        expiresInMs: ttl,
+        policyMode,
+        hostKeyPolicy,
+        wouldConnect: !rootDenied && (policyDecision?.allowed ?? true),
+      };
+    }
 
     try {
+      if (rootDenied) {
+        throw createPolicyError(
+          "Root SSH login is disabled by policy",
+          "Connect as an unprivileged user and use approved privilege escalation workflows.",
+        );
+      }
+
       // Clean up old sessions if we're at the limit
       if (this.sessions.size >= this.maxSessions) {
         this.evictOldestSession();
@@ -102,9 +164,7 @@ export class SessionManager {
       const ssh = new NodeSSH();
       const authConfig = await this.buildAuthConfig(params);
 
-      const strictHostKey =
-        params.strictHostKeyChecking ?? process.env.STRICT_HOST_KEY_CHECKING === "true";
-      const knownHostsPath = params.knownHostsPath ?? process.env.KNOWN_HOSTS_PATH;
+      const knownHostsPath = params.knownHostsPath ?? this.security.knownHostsPath;
 
       const connectConfig: SSHConnectConfig = {
         host: params.host,
@@ -113,10 +173,25 @@ export class SessionManager {
         readyTimeout: params.readyTimeoutMs ?? 20000,
         ...authConfig,
       };
-      if (!strictHostKey) {
-        connectConfig.hostVerifier = () => true;
+      if (this.security.allowedCiphers.length > 0) {
+        connectConfig.algorithms = {
+          ...connectConfig.algorithms,
+          cipher: this.security.allowedCiphers as never,
+        };
       }
-      if (knownHostsPath !== undefined) {
+
+      if (params.expectedHostKeySha256) {
+        connectConfig.hostHash = "sha256";
+        connectConfig.hostVerifier = (hashedKey: string) =>
+          normalizeSha256Fingerprint(hashedKey) ===
+          normalizeSha256Fingerprint(params.expectedHostKeySha256 ?? "");
+      } else if (hostKeyPolicy === "insecure") {
+        connectConfig.hostVerifier = () => true;
+      } else if (hostKeyPolicy === "accept-new") {
+        connectConfig.hostHash = "sha256";
+        connectConfig.hostVerifier = (hashedKey: string) =>
+          this.verifyAcceptNewHostKey(params.host, params.port ?? 22, hashedKey);
+      } else if (knownHostsPath !== "") {
         connectConfig.knownHosts = knownHostsPath;
       }
 
@@ -136,11 +211,11 @@ export class SessionManager {
         });
       }
 
-      if (!strictHostKey) {
-        logger.warn(
-          "Host key checking is DISABLED. Set STRICT_HOST_KEY_CHECKING=true for production use.",
-          { sessionId },
-        );
+      if (hostKeyPolicy !== "strict") {
+        logger.warn("Strict host key verification is not active for this session.", {
+          sessionId,
+          hostKeyPolicy,
+        });
       }
 
       const sessionInfo: SessionInfo = {
@@ -151,6 +226,8 @@ export class SessionManager {
         createdAt: now,
         expiresAt: now + ttl,
         lastUsed: now,
+        policyMode,
+        hostKeyPolicy,
       };
 
       const session: SSHSession = {
@@ -176,6 +253,8 @@ export class SessionManager {
         username: params.username,
         sftpAvailable,
         expiresInMs: ttl,
+        policyMode,
+        hostKeyPolicy,
       };
     } catch (error) {
       logger.error("Failed to open SSH session", { error, host: params.host });
@@ -201,6 +280,12 @@ export class SessionManager {
           throw createConnectionError(
             "SSH connection refused",
             "Check if the SSH service is running on the target port",
+          );
+        }
+        if (error.message.toLowerCase().includes("host key")) {
+          throw createHostKeyError(
+            "SSH host key verification failed",
+            "Check known_hosts, hostKeyPolicy, or expectedHostKeySha256",
           );
         }
       }
@@ -396,7 +481,34 @@ export class SessionManager {
    * Generates a unique session ID
    */
   private generateSessionId(): string {
-    return `ssh-${Date.now()}-${++this.sessionCounter}`;
+    return `ssh-${randomUUID()}`;
+  }
+
+  private resolveHostKeyPolicy(params: ConnectionParams): HostKeyPolicy {
+    if (params.strictHostKeyChecking === false && params.hostKeyPolicy === "strict") {
+      return "insecure";
+    }
+    if (params.hostKeyPolicy) {
+      return params.hostKeyPolicy;
+    }
+    if (params.strictHostKeyChecking !== undefined) {
+      return params.strictHostKeyChecking ? "strict" : "insecure";
+    }
+    return this.security.hostKeyPolicy;
+  }
+
+  private verifyAcceptNewHostKey(host: string, port: number, hashedKey: string): boolean {
+    const key = `${host}:${port}`;
+    const normalized = normalizeSha256Fingerprint(hashedKey);
+    const accepted = this.acceptedHostKeys.get(key);
+
+    if (!accepted) {
+      this.acceptedHostKeys.set(key, normalized);
+      logger.warn("Accepted first-seen SSH host key for this process only", { host, port });
+      return true;
+    }
+
+    return accepted === normalized;
   }
 
   /**

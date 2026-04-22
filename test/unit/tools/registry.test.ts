@@ -49,6 +49,7 @@ describe("ToolRegistry", () => {
       alias.content[0] && alias.content[0].type === "text" ? alias.content[0].text : "";
 
     expect(direct.isError).toBeFalsy();
+    expect(direct.structuredContent).toEqual({ tool: "ssh_open_session" });
     expect(aliasContent).toContain("ssh_open_session");
   });
 

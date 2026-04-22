@@ -4,8 +4,8 @@
  * SSH MCP Server - Entry Point
  *
  * A Model Context Protocol (MCP) server that provides SSH automation tools
- * for GitHub Copilot and VS Code. Supports remote command execution, file
- * operations, and system administration tasks over SSH.
+ * for MCP-capable clients. Supports secure session management, remote command
+ * execution, file operations, transfers, tunnels, and system administration.
  */
 
 import { readFileSync } from "fs";
@@ -37,9 +37,12 @@ function printHelp() {
     "",
     "Usage:",
     "  mcp-ssh-tool             Start MCP server over stdio (default)",
+    "  mcp-ssh-tool --transport=http Start Streamable HTTP server",
     "  mcp-ssh-tool --help      Show this help",
     "  mcp-ssh-tool --version   Show version",
     "  mcp-ssh-tool --stdio     Force stdio mode (default)",
+    "  mcp-ssh-tool --host 127.0.0.1 --port 3000",
+    "  mcp-ssh-tool --bearer-token-file /path/token --enable-legacy-sse",
     "",
     "Examples:",
     "  Run as MCP stdio server: mcp-ssh-tool",
@@ -60,6 +63,11 @@ interface CliOptions {
   help: boolean;
   version: boolean;
   forceStdio: boolean;
+  transport: "stdio" | "http";
+  host?: string;
+  port?: string;
+  bearerTokenFile?: string;
+  enableLegacySse: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -67,9 +75,12 @@ function parseArgs(argv: string[]): CliOptions {
     help: false,
     version: false,
     forceStdio: false,
+    transport: "stdio",
+    enableLegacySse: false,
   };
 
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
     switch (arg) {
       case "--help":
       case "-h":
@@ -81,6 +92,43 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case "--stdio":
         opts.forceStdio = true;
+        opts.transport = "stdio";
+        break;
+      case "--transport=http":
+        opts.transport = "http";
+        break;
+      case "--transport=stdio":
+        opts.transport = "stdio";
+        break;
+      case "--host":
+        {
+          const next = argv[index + 1];
+          if (next !== undefined) {
+            opts.host = next;
+            index++;
+          }
+        }
+        break;
+      case "--port":
+        {
+          const next = argv[index + 1];
+          if (next !== undefined) {
+            opts.port = next;
+            index++;
+          }
+        }
+        break;
+      case "--bearer-token-file":
+        {
+          const next = argv[index + 1];
+          if (next !== undefined) {
+            opts.bearerTokenFile = next;
+            index++;
+          }
+        }
+        break;
+      case "--enable-legacy-sse":
+        opts.enableLegacySse = true;
         break;
       case "--no-stdio":
         process.stderr.write(
@@ -109,6 +157,23 @@ async function main() {
   if (opts.version) {
     printVersion();
     process.exit(0);
+  }
+
+  if (opts.transport === "http") {
+    if (opts.host) {
+      process.env.SSH_MCP_HTTP_HOST = opts.host;
+    }
+    if (opts.port) {
+      process.env.SSH_MCP_HTTP_PORT = opts.port;
+    }
+    if (opts.bearerTokenFile) {
+      process.env.SSH_MCP_HTTP_BEARER_TOKEN_FILE = opts.bearerTokenFile;
+    }
+    if (opts.enableLegacySse) {
+      process.env.SSH_MCP_ENABLE_LEGACY_SSE = "true";
+    }
+    await import("./server-http.js");
+    return;
   }
 
   try {

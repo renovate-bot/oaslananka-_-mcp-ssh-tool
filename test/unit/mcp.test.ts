@@ -3,7 +3,9 @@ import { readFileSync } from "fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
   ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
   ReadResourceRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -105,6 +107,34 @@ describe("SSHMCPServer", () => {
       }),
     );
 
+    await expect(handlers.get(ListPromptsRequestSchema)?.()).resolves.toEqual(
+      expect.objectContaining({
+        prompts: expect.arrayContaining([
+          expect.objectContaining({ name: "safe-connect" }),
+          expect.objectContaining({ name: "plan-mutation" }),
+        ]),
+      }),
+    );
+
+    await expect(
+      handlers.get(GetPromptRequestSchema)?.({
+        params: {
+          name: "safe-connect",
+          arguments: { host: "prod-1", username: "deploy" },
+        },
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            content: expect.objectContaining({
+              text: expect.stringContaining("prod-1"),
+            }),
+          }),
+        ]),
+      }),
+    );
+
     const result = (await handlers.get(CallToolRequestSchema)?.({
       params: { name: "ssh_list_sessions", arguments: {} },
     })) as {
@@ -132,6 +162,10 @@ describe("SSHMCPServer", () => {
         get: jest.fn((key: string) =>
           key === "rateLimit" ? { enabled: true } : base.config.get(key as never),
         ),
+        getAll: jest.fn(() => ({
+          ...base.config.getAll(),
+          rateLimit: { enabled: true, maxRequests: 100, windowMs: 60_000 },
+        })),
       },
       rateLimiter: {
         check: jest.fn(() => ({ allowed: false, resetIn: 1234 })),

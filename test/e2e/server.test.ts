@@ -31,16 +31,41 @@ e2eDescribe("SSH MCP Server E2E Tests", () => {
   let sessionId = "";
 
   beforeAll(async () => {
-    container = createContainer();
+    container = createContainer({
+      security: {
+        allowRootLogin: false,
+        allowedCiphers: [],
+        hostKeyPolicy: "insecure",
+        knownHostsPath: "",
+      },
+      policy: {
+        mode: "enforce",
+        allowRootLogin: false,
+        allowRawSudo: false,
+        allowDestructiveCommands: true,
+        allowDestructiveFs: false,
+        allowedHosts: [],
+        commandAllow: [],
+        commandDeny: [],
+        pathAllowPrefixes: ["/tmp"],
+        pathDenyPrefixes: [],
+      },
+    });
     processService = createProcessService({
       sessionManager: container.sessionManager,
+      config: container.config.getAll(),
+      policy: container.policy,
     });
     fsService = createFsService({
       sessionManager: container.sessionManager,
       metrics: container.metrics,
+      config: container.config.getAll(),
+      policy: container.policy,
     });
     streamingService = createStreamingService({
       sessionManager: container.sessionManager,
+      config: container.config.getAll(),
+      policy: container.policy,
     });
 
     const result = await container.sessionManager.openSession({
@@ -49,6 +74,7 @@ e2eDescribe("SSH MCP Server E2E Tests", () => {
       username: TEST_SSH_USER,
       password: TEST_SSH_PASS,
       auth: "password",
+      hostKeyPolicy: "insecure",
     });
 
     sessionId = result.sessionId;

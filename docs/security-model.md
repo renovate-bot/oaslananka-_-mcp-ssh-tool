@@ -1,70 +1,70 @@
 # Security Model
 
-`mcp-ssh-tool` is a remote automation server. It can open SSH sessions, run
-commands, modify files, and manage services on target hosts. The security model
-therefore focuses on reducing accidental exposure and unsafe defaults without
-pretending the tool can fully sandbox a trusted SSH operator.
+`mcp-ssh-tool` is a privileged remote automation server. It cannot sandbox a user who has valid SSH credentials, so v2 focuses on secure defaults, explicit policy, auditability, and clear trust boundaries.
 
-## What The Server Protects
+## Trust Boundaries
 
-### Sensitive Log Redaction
+- The MCP client is a privileged operator once it can call this server.
+- The local machine running the server can access SSH keys, agent sockets, policy files, and logs.
+- Remote hosts enforce their own SSH, sudo, filesystem, package, and service permissions.
+- HTTP transport is a remote attack surface and must be authenticated.
 
-The logger automatically redacts common secret-shaped fields and message
-patterns, including:
+## v2 Defaults
 
-- passwords
-- private keys and PEM blobs
-- passphrases
-- tokens and bearer credentials
-- API keys and generic auth fields
+- Host key verification is `strict`.
+- Root SSH login is denied.
+- Raw `proc_sudo` is denied.
+- Destructive commands are denied by safety policy.
+- Destructive filesystem operations are limited to configured prefixes.
+- HTTP binds to `127.0.0.1`.
+- Legacy SSE endpoints are disabled.
+- Logs are redacted before serialization.
 
-Use `LOG_FORMAT=json` if logs are shipped to Azure Monitor, Datadog, or another
-aggregator. Redaction is applied before log serialization.
+## Host Keys
 
-### Host Key Verification
+Use `SSH_MCP_HOST_KEY_POLICY`:
 
-Host key checking is relaxed by default for ease of first-time setup. For
-production use, set:
+- `strict`: verify against `known_hosts`.
+- `accept-new`: process-local trust-on-first-use for development and labs.
+- `insecure`: disables host-key verification and should not be used in production.
 
-```dotenv
-STRICT_HOST_KEY_CHECKING=true
-KNOWN_HOSTS_PATH=/path/to/known_hosts
-```
+For high-assurance sessions, pass `expectedHostKeySha256` to `ssh_open_session`. This pins a specific SHA-256 fingerprint for that connection.
 
-Per-request parameters can further tighten host key behavior for individual
-connections.
+Deprecated boolean aliases are still accepted for v2 compatibility, but new deployments should use `hostKeyPolicy`.
 
-### Session Lifecycle Controls
+## Policy Layer
 
-- sessions expire automatically based on TTL
-- inactive sessions are cleaned up on an interval
-- the session manager evicts older entries when the max-session limit is reached
-- credentials are used in memory for connection setup and are not stored
-  persistently by the server
+All mutating or privilege-sensitive handlers call the central policy engine. Policy can restrict:
 
-### Rate Limiting
+- hosts
+- root login
+- raw sudo
+- command allow/deny regexes
+- destructive command patterns
+- path allow/deny prefixes
+- destructive filesystem operations
 
-The server applies a sliding-window rate limiter around tool execution. This
-helps reduce brute-force or flood-style abuse against the MCP entry point.
+Use `policyMode: "explain"` to get a policy verdict without executing. This is the recommended AI-client pattern before configuration changes, deletes, sudo, package removal, service restart/stop, transfers, and tunnels.
 
-## Safety Warnings
+## Audit And Observability
 
-`src/safety.ts` classifies risky shell commands into risk levels such as
-critical, high, medium, and low. These checks are intentionally advisory:
+The server exposes:
 
-- they help the caller understand dangerous inputs
-- they do not replace SSH permissions, sudo policy, or remote system hardening
-- they do not turn the tool into a sandbox
+- `mcp-ssh-tool://policy/effective`
+- `mcp-ssh-tool://audit/recent`
+- `mcp-ssh-tool://metrics/json`
+- `mcp-ssh-tool://metrics/prometheus`
 
-The practical trust boundary is still the target host and the credentials used
-to access it.
+Metrics include sessions, command timing/failures, file bytes, transfer bytes, tunnel lifecycle, auth failures, and policy denials. Logs redact secrets such as passwords, private keys, passphrases, tokens, authorization headers, and agent paths.
 
-## Recommended Deployment Posture
+## Recommended Production Posture
 
-- enable strict host key checking
-- prefer SSH keys or agent auth over passwords
-- scope credentials to the minimum required host/user combination
-- run the MCP server in a controlled workstation or CI environment
-- ship stderr logs to a secure destination if centralized observability is used
-- treat MCP clients as privileged operators because they can invoke powerful
-  remote actions
+- Run stdio for local desktop use.
+- Use Streamable HTTP only behind bearer auth and origin validation.
+- Keep HTTP on loopback behind an authenticated reverse proxy whenever possible.
+- Store policy in `SSH_MCP_POLICY_FILE`.
+- Keep `allowRawSudo=false`; prefer `ensure_*` tools.
+- Require non-root SSH users and grant narrow sudo rules on the host.
+- Pin host fingerprints for sensitive hosts.
+- Export JSON logs and Prometheus metrics to a secured destination.
+- Review `mcp-ssh-tool://audit/recent` during incident response.

@@ -27,6 +27,17 @@ describe("Schema contracts", () => {
     expect(result.auth).toBe("auto");
     expect(result.readyTimeoutMs).toBe(20000);
     expect(result.ttlMs).toBe(900000);
+    expect(result.hostKeyPolicy).toBe("strict");
+    expect(result.policyMode).toBe("enforce");
+  });
+
+  test("ConnectionParamsSchema keeps deprecated strictHostKeyChecking alias", () => {
+    const result = ConnectionParamsSchema.parse({
+      host: "example.com",
+      username: "deployer",
+      strictHostKeyChecking: false,
+    });
+
     expect(result.strictHostKeyChecking).toBe(false);
   });
 

@@ -1,7 +1,9 @@
 import { describe, expect, test } from "@jest/globals";
 import {
   formatPromptsForDisplay,
+  getMCPPrompt,
   getPromptsByCategory,
+  listMCPPrompts,
   getRandomPrompts,
   PROMPT_SUGGESTIONS,
 } from "../../src/prompts.js";
@@ -27,5 +29,30 @@ describe("prompt suggestions", () => {
     expect(display).toContain("SSH MCP Tool - What You Can Do");
     expect(display).toContain("Session Operations");
     expect(display).toContain("Package Operations");
+  });
+
+  test("exposes curated MCP prompts", () => {
+    const prompts = listMCPPrompts();
+
+    expect(prompts.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "safe-connect",
+          title: expect.stringContaining("Safely connect"),
+        }),
+        expect.objectContaining({
+          name: "plan-mutation",
+        }),
+      ]),
+    );
+
+    const prompt = getMCPPrompt("safe-connect", {
+      host: "prod-1",
+      username: "deploy",
+    });
+
+    expect(prompt.messages[0]?.content.text).toContain("hostKeyPolicy=strict");
+    expect(prompt.messages[0]?.content.text).toContain("prod-1");
+    expect(() => getMCPPrompt("missing")).toThrow("Unknown prompt");
   });
 });

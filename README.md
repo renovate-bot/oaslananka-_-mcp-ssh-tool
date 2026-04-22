@@ -1,26 +1,29 @@
 # mcp-ssh-tool
 
-[![LobeHub](https://lobehub.com/badge/mcp/oaslananka-mcp-ssh-tool?style=flat-square)](https://lobehub.com/tr/mcp/oaslananka-mcp-ssh-tool)
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-tool.svg)](https://www.npmjs.com/package/mcp-ssh-tool)
 [![Official MCP Registry](https://img.shields.io/badge/MCP%20Registry-active-green.svg)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.oaslananka%2Fmcp-ssh-tool/versions/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![npm downloads](https://img.shields.io/npm/dm/mcp-ssh-tool.svg)](https://www.npmjs.com/package/mcp-ssh-tool)
 
-A Model Context Protocol (MCP) SSH client server that provides autonomous SSH operations for GitHub Copilot and VS Code. Enable natural language SSH automation without manual prompts or GUI interactions.
+Production-grade MCP SSH automation for operators, developers, and AI clients. `mcp-ssh-tool` opens persistent SSH sessions and exposes safe, structured tools for command execution, file operations, transfers, tunnels, package/service management, metrics, resources, and guided prompts.
 
-Official MCP Registry entry: `io.github.oaslananka/mcp-ssh-tool`  
-Registry metadata: https://registry.modelcontextprotocol.io/v0.1/servers/io.github.oaslananka%2Fmcp-ssh-tool/versions/latest
+v2 is secure by default: strict host-key verification is on, root login is off, raw sudo is policy-gated, destructive commands and filesystem mutations are denied unless policy allows them, and remote HTTP starts on loopback only unless bearer auth and allowed origins are configured.
+
+## Why This Server
+
+- **Trust:** central policy engine, structured audit events, redacted logs, strict host keys, and machine-readable errors.
+- **MCP quality:** stdio for local clients, Streamable HTTP for remote clients, legacy SSE only behind an explicit compatibility flag.
+- **AI-friendly tools:** stable output schemas, `structuredContent`, annotations for read-only/destructive/idempotent behavior, resources, and curated prompts.
+- **Operations:** session TTL/eviction, command timeouts, transfer checksum verification, real SSH forwarding, Prometheus metrics, and OpenTelemetry hooks.
+- **Portability:** SFTP first, POSIX/BusyBox-aware shell fallbacks for basic file operations, and explicit support boundaries.
 
 ## Quick Start
 
-### Install
+```bash
+npm install -g mcp-ssh-tool
+```
 
-- Global install (recommended): `npm install -g mcp-ssh-tool`
-- One-off run: `npx mcp-ssh-tool`
-
-### MCP Client Configuration (VS Code / Claude Desktop / others)
-
-Add to your MCP configuration (`mcp.json`, `.vscode/mcp.json`, or the Claude Desktop MCP config):
+Add a stdio MCP server to your client:
 
 ```json
 {
@@ -34,144 +37,112 @@ Add to your MCP configuration (`mcp.json`, `.vscode/mcp.json`, or the Claude Des
 }
 ```
 
-### Usage Examples
+Use it from your MCP client:
 
-Once configured, you can use natural language with your MCP client:
-
-- **SSH Connection**: "Connect to server 192.168.1.100 as admin using SSH key"
-- **File Operations**: "Read the content of /etc/nginx/nginx.conf on the server"
-- **Command Execution**: "Run 'systemctl status nginx' on the remote server"
-- **Package Management**: "Install htop package on Ubuntu server"
-- **Service Control**: "Restart the nginx service"
-- **Claude Desktop**: "connect to my server and check disk usage"
-- **Install a package/service stack**: "install nginx on my remote server"
-- **Read a config file**: "read the file /etc/nginx/nginx.conf"
-- **Restart a service**: "restart the nginx service"
-- **Browse logs**: "list files in /var/log"
-
-### Available Tools
-
-- `ssh_open_session` - Establish SSH connection with various auth methods
-- `ssh_close_session` - Close SSH session
-- `ssh_list_sessions` - List all active SSH sessions
-- `ssh_ping` - Check if a session is alive and responsive
-- `ssh_list_configured_hosts` - List hosts from ~/.ssh/config
-- `ssh_resolve_host` - Resolve host alias from SSH config
-- `proc_exec` - Execute commands remotely (with optional timeout)
-- `proc_sudo` - Execute commands with sudo privileges
-- `fs_read`, `fs_write`, `fs_list`, `fs_stat`, `fs_mkdirp`, `fs_rmrf`, `fs_rename` - File system operations
-- `ensure_package` - Package management with `present` and `absent` states
-- `ensure_service` - Service control including `restarted`
-- `ensure_lines_in_file` - File line management with `present` and `absent` states
-- `patch_apply` - Apply patches to files
-- `os_detect` - System information detection
-- `get_metrics` - Server metrics in JSON or Prometheus format
-- `proc_exec_stream` - Streaming command execution with chunked output
-- `file_upload`, `file_download` - SFTP file transfer helpers
-- `tunnel_local_forward`, `tunnel_remote_forward`, `tunnel_close`, `tunnel_list` - Tunnel management
-
-### Available Resources
-
-- `mcp-ssh-tool://sessions/active` - Active sessions as JSON
-- `mcp-ssh-tool://metrics/json` - Metrics snapshot as JSON
-- `mcp-ssh-tool://metrics/prometheus` - Prometheus metrics export
-- `mcp-ssh-tool://ssh-config/hosts` - Parsed local SSH host aliases
-
-## Overview
-
-The SSH MCP Server acts as a bridge between GitHub Copilot and remote systems via SSH. It supports:
-
-- **Non-interactive SSH operations** - No prompts or GUI interactions
-- **Multiple authentication methods** - Password, SSH keys, or SSH agent
-- **Session management** - Automatic connection pooling with TTL and LRU eviction
-- **File system operations** - Read, write, list, and manage remote files via SFTP, with SSH-shell fallbacks for hosts that do not expose an SFTP subsystem
-- **Process execution** - Run commands and sudo operations remotely
-- **High-level automation** - Package management, service control, and configuration management
-- **Security** - Automatic redaction of sensitive data in logs
-
-## Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│  GitHub Copilot │────│  SSH MCP Server  │────│  Remote Systems │
-│     / VS Code   │    │                  │    │   (via SSH)     │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         │ MCP stdio protocol    │ Session management    │ SSH + optional SFTP
-         │                       │ LRU cache + TTL       │
-         │                       │ Auth strategies       │
+```text
+Open a safe SSH session to prod-1 as deploy, inspect host capabilities, then show disk usage.
 ```
 
-### Embedded / BusyBox Targets
+## Requirements
 
-Some embedded targets expose SSH command execution but do not ship an SFTP
-subsystem, which is common with Dropbear- or BusyBox-based systems. In that
-case `ssh_open_session` still succeeds and reports `sftpAvailable: false`.
-Core file tools such as `fs_read`, `fs_write`, `fs_stat`, `fs_list`,
-`fs_mkdirp`, `fs_rmrf`, and `fs_rename` automatically fall back to shell-based
-implementations.
+- Node.js `>=22.14.0`
+- SSH access to target hosts
+- A populated `known_hosts` file for strict host verification, or an explicit per-session host-key policy
 
-## Installation
+## Transports
 
-### Prerequisites
+| Mode | Command | Use When |
+|------|---------|----------|
+| stdio | `mcp-ssh-tool` | Local desktop clients such as ChatGPT, Claude Desktop, VS Code, Cursor, or Codex. |
+| Streamable HTTP | `mcp-ssh-tool --transport=http --host 127.0.0.1 --port 3000` | Remote MCP clients, reverse proxies, or Inspector sessions. |
+| legacy SSE | `mcp-ssh-tool --transport=http --enable-legacy-sse` | Temporary v1 compatibility only. Prefer Streamable HTTP. |
 
-- Node.js ≥ 20 (LTS)
-- SSH access to target systems
-- SSH keys or credentials for authentication
+Non-loopback HTTP startup is refused unless both `--bearer-token-file` and allowed origins are configured.
 
-### Install from npm
+## Secure Defaults
 
-```bash
-npm install -g mcp-ssh-tool
+| Area | v2 Default |
+|------|------------|
+| Host keys | `hostKeyPolicy=strict`, `knownHostsPath=~/.ssh/known_hosts` |
+| Root SSH login | denied |
+| Raw `proc_sudo` | denied unless `allowRawSudo=true` |
+| Destructive commands | denied unless `allowDestructiveCommands=true` |
+| Destructive fs operations | allowed only under policy prefixes, denied elsewhere |
+| HTTP bind | `127.0.0.1` |
+| Legacy SSE | disabled |
+| File reads | size-limited by `SSH_MCP_MAX_FILE_SIZE` |
+
+Per-session `policyMode: "explain"` returns a plan/verdict without executing. Use it before mutations when an AI client needs to summarize risk.
+
+## Policy Example
+
+Set `SSH_MCP_POLICY_FILE=/etc/mcp-ssh-tool/policy.json`:
+
+```json
+{
+  "mode": "enforce",
+  "allowRootLogin": false,
+  "allowRawSudo": false,
+  "allowDestructiveCommands": false,
+  "allowDestructiveFs": false,
+  "allowedHosts": ["^prod-[0-9]+\\.example\\.com$"],
+  "commandAllow": ["^(uname|df|uptime|systemctl status)\\b"],
+  "commandDeny": ["rm\\s+-rf\\s+/", "shutdown", "reboot"],
+  "pathAllowPrefixes": ["/tmp", "/var/tmp", "/home/deploy"],
+  "pathDenyPrefixes": ["/etc/shadow", "/etc/sudoers", "/boot", "/dev", "/proc"]
+}
 ```
 
-### Build from source
+Simple deploys can use environment overrides such as `SSH_MCP_ALLOW_RAW_SUDO=true`, `SSH_MCP_ALLOWED_HOSTS=prod-1.example.com`, or `SSH_MCP_PATH_ALLOW_PREFIXES=/tmp,/home/deploy`.
 
-```bash
-git clone https://github.com/oaslananka/mcp-ssh-tool.git
-cd mcp-ssh-tool
-npm install
-npm run build
-npm link
-```
+## Core Tools
 
-### CLI Flags
+- `ssh_open_session`, `ssh_close_session`, `ssh_list_sessions`, `ssh_ping`, `ssh_list_configured_hosts`, `ssh_resolve_host`
+- `proc_exec`, `proc_sudo`, `proc_exec_stream`
+- `fs_read`, `fs_write`, `fs_list`, `fs_stat`, `fs_mkdirp`, `fs_rmrf`, `fs_rename`
+- `file_upload`, `file_download`
+- `ensure_package`, `ensure_service`, `ensure_lines_in_file`, `patch_apply`
+- `os_detect`, `get_metrics`
+- `tunnel_local_forward`, `tunnel_remote_forward`, `tunnel_list`, `tunnel_close`
 
-- `--help` / `-h`: Show usage and examples.
-- `--version` / `-v`: Print version.
-- `--stdio`: Force stdio mode (default).
+All tools return text plus stable `structuredContent`. Tool metadata includes titles, output schemas, and annotations that disclose read-only, destructive, idempotent, and external side-effect behavior.
 
-**Note:** This is an MCP stdio server. The terminal is not an interactive shell; use an MCP client (Claude Desktop, VS Code MCP, etc.) or send JSON-RPC over stdio.
+## Resources And Prompts
 
-### Platform Notes
+Resources:
 
-- **Linux / macOS:** Uses POSIX shell wrappers with safe quoting. Default temp directory: `/tmp`.
-- **Windows targets:** Requires OpenSSH server/agent; key discovery checks `C:\\Users\\<you>\\.ssh\\`. Commands are wrapped for PowerShell-safe execution. Package/service helpers are intentionally disabled on Windows targets.
-- **Host keys:** Host key checking is relaxed by default. Set `STRICT_HOST_KEY_CHECKING=true` and optionally `KNOWN_HOSTS_PATH` to enforce verification.
+- `mcp-ssh-tool://sessions/active`
+- `mcp-ssh-tool://metrics/json`
+- `mcp-ssh-tool://metrics/prometheus`
+- `mcp-ssh-tool://ssh-config/hosts`
+- `mcp-ssh-tool://policy/effective`
+- `mcp-ssh-tool://audit/recent`
+- `mcp-ssh-tool://capabilities/support-matrix`
 
-## ChatGPT Desktop Integration
+Prompts:
 
-### Quick Setup
+- `safe-connect`
+- `inspect-host-capabilities`
+- `plan-mutation`
+- `managed-config-change`
 
-```bash
-npm run setup:chatgpt
-```
+## Support Matrix
 
-This command automatically configures ChatGPT Desktop to use mcp-ssh-tool.
+| Target | Status |
+|--------|--------|
+| Linux | Full support. |
+| macOS/BSD | Session, process, fs, and transfer supported; package/service helpers only where tested. |
+| BusyBox/dropbear | Experimental for session, process, and basic fs fallbacks. |
+| Windows SSH targets | Experimental for session, process, fs, and transfer; no `proc_sudo` or `ensure_*`. |
 
-### Manual Setup
+## Client Examples
 
-Add to your ChatGPT Desktop MCP config:
-
-- **macOS**: `~/Library/Application Support/ChatGPT/mcp.json`
-- **Windows**: `%APPDATA%\ChatGPT\mcp.json`
-- **Linux**: `~/.config/chatgpt/mcp.json`
+ChatGPT or Claude Desktop:
 
 ```json
 {
   "mcpServers": {
-    "ssh-mcp-server": {
-      "name": "ssh-mcp-server",
+    "ssh-mcp": {
       "command": "npx",
       "args": ["-y", "mcp-ssh-tool"]
     }
@@ -179,642 +150,72 @@ Add to your ChatGPT Desktop MCP config:
 }
 ```
 
-For detailed usage, see [docs/chatgpt-usage.md](docs/chatgpt-usage.md).
-
-## Codex Integration
-
-### Quick Setup
-
-Install the package globally, then register it with Codex:
-
-```bash
-npm install -g mcp-ssh-tool
-codex mcp add ssh-mcp -- mcp-ssh-tool
-```
-
-If you prefer not to install globally, you can register it through `npx`:
-
-```bash
-codex mcp add ssh-mcp -- npx -y mcp-ssh-tool
-```
-
-### Verification
-
-Check that Codex can see the MCP server:
-
-```bash
-codex mcp list
-codex mcp get ssh-mcp
-```
-
-You should see an enabled stdio server whose command is `mcp-ssh-tool` or `npx`.
-
-### Optional Security Hardening
-
-To enforce host key verification in the Codex-managed server process:
-
-```bash
-codex mcp remove ssh-mcp
-codex mcp add ssh-mcp \
-  --env STRICT_HOST_KEY_CHECKING=true \
-  --env KNOWN_HOSTS_PATH=/path/to/known_hosts \
-  -- mcp-ssh-tool
-```
-
-After adding the server, restart Codex or open a fresh session, then try a simple tool call such as listing active sessions or opening an SSH connection.
-
-## VS Code Copilot Integration
-
-### User-level Configuration (Recommended)
-
-Open VS Code and press `Ctrl+Shift+P`, then run **"MCP: Open User Configuration"**.
-
-Add to your `mcp.json`:
+VS Code or Cursor:
 
 ```json
 {
   "servers": {
     "ssh-mcp": {
       "type": "stdio",
-      "command": "mcp-ssh-tool",
-      "args": []
+      "command": "mcp-ssh-tool"
     }
   }
 }
 ```
 
-### Workspace-level Configuration
-
-Create `.vscode/mcp.json` in your workspace:
-
-```json
-{
-  "servers": {
-    "ssh-mcp": {
-      "type": "stdio",
-      "command": "mcp-ssh-tool",
-      "args": []
-    }
-  }
-}
-```
-
-### Verification
-
-1. Restart VS Code
-2. Open Copilot Chat
-3. The SSH MCP tools should appear in the available tools list
-4. Test with: *"Connect to 192.168.1.100 as admin and run 'uname -a'"*
-
-## Claude Desktop, Antigravity, and Other MCP Clients
-
-Any MCP-compatible client that can launch a stdio server can use `mcp-ssh-tool`.
-The exact settings screen or config file varies by client, but the process is the same:
-
-1. Install the package:
+MCP Inspector over HTTP:
 
 ```bash
-npm install -g mcp-ssh-tool
-```
-
-2. Register a stdio MCP server that launches:
-
-```json
-{
-  "servers": {
-    "ssh-mcp": {
-      "type": "stdio",
-      "command": "mcp-ssh-tool",
-      "args": []
-    }
-  }
-}
-```
-
-3. If the client uses an `mcpServers`-style schema instead of `servers`, use the equivalent entry:
-
-```json
-{
-  "mcpServers": {
-    "ssh-mcp-server": {
-      "command": "npx",
-      "args": ["-y", "mcp-ssh-tool"]
-    }
-  }
-}
-```
-
-For Claude Desktop, use the same stdio command pattern above in its MCP configuration.
-For Antigravity or other MCP clients, use the client's own MCP settings UI or config format, but point it at the same executable command.
-
-## Usage Examples
-
-### Basic Connection and Command Execution
-
-```
-"Connect to 10.11.12.13 as deployer with password 'mypass' and run 'df -h'"
-```
-
-### File Operations
-
-```
-"Connect to server.example.com as admin, read /etc/nginx/nginx.conf and show me the server blocks"
-```
-
-### System Administration
-
-```
-"Connect to 192.168.1.50 as root, install htop package, start nginx service, and list /var/www contents"
-```
-
-### Configuration Management
-
-```
-"Connect to web-server as admin, add these lines to /etc/hosts:
-192.168.1.10 db-server
-192.168.1.20 cache-server
-Then restart networking service"
-```
-
-### Ready-to-use Prompt Ideas
-
-```text
-"connect to my server and check disk usage"
-```
-
-```text
-"install nginx on my remote server"
-```
-
-```text
-"read the file /etc/nginx/nginx.conf"
-```
-
-```text
-"restart the nginx service"
-```
-
-```text
-"list files in /var/log"
-```
-
-## Pro Tips
-
-- **Multiple sessions**: Open one session per host or environment and keep them alive with `ssh_list_sessions` and `ssh_ping` when you are switching between production, staging, and development machines.
-- **SFTP fallback for BusyBox/Dropbear**: On embedded systems that do not expose an SFTP subsystem, `ssh_open_session` can still succeed with `sftpAvailable: false`, and the core `fs_*` tools automatically fall back to shell-based implementations.
-- **Host key verification**: Set `STRICT_HOST_KEY_CHECKING=true` in the MCP server environment and optionally `KNOWN_HOSTS_PATH` for stricter production-grade SSH verification.
-
-## API Reference
-
-## Architecture
-
-```text
-src/
-├── container.ts       - Dependency injection wiring
-├── config.ts          - ConfigManager (env + programmatic overrides)
-├── index.ts           - CLI entry point & graceful shutdown
-├── mcp.ts             - MCP server (thin: delegates to ToolRegistry)
-├── tools/
-│   ├── registry.ts    - ToolRegistry (routes CallTool requests)
-│   ├── types.ts       - ToolProvider interface
-│   ├── session.provider.ts
-│   ├── process.provider.ts
-│   ├── fs.provider.ts
-│   ├── ensure.provider.ts
-│   ├── system.provider.ts
-│   ├── transfer.provider.ts
-│   └── tunnel.provider.ts
-├── session.ts         - SessionManager (LRU cache + TTL)
-├── resources.ts       - MCP resources for sessions, metrics, and SSH hosts
-├── telemetry.ts       - Optional OpenTelemetry tracing
-├── rate-limiter.ts    - Sliding window rate limiter
-├── metrics.ts         - Prometheus-compatible metrics
-├── safety.ts          - Command safety warnings (non-blocking)
-└── ...                - fs-tools, process, ensure, detect, ...
-```
-
-### Adding a new tool group
-
-1. Create `src/tools/<your-namespace>.provider.ts` implementing `ToolProvider`
-2. Register it in `src/tools/index.ts`
-3. Add unit tests to `test/unit/tools/<your-namespace>.provider.test.ts`
-
-No changes to `mcp.ts` are needed.
-
-### Session tools
-
-#### `ssh_open_session`
-
-```json
-{
-  "host": "example.com",
-  "username": "admin",
-  "port": 22,
-  "auth": "auto",
-  "password": "optional",
-  "privateKey": "optional-inline-key",
-  "privateKeyPath": "optional-path",
-  "passphrase": "optional",
-  "useAgent": false,
-  "readyTimeoutMs": 20000,
-  "ttlMs": 900000
-}
-```
-
-Returns:
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "host": "example.com",
-  "username": "admin",
-  "expiresInMs": 900000
-}
-```
-
-#### `ssh_close_session`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1"
-}
-```
-
-#### `ssh_list_sessions`, `ssh_ping`, `ssh_list_configured_hosts`, `ssh_resolve_host`
-
-- `ssh_list_sessions` returns active sessions with remaining TTL.
-- `ssh_ping` checks liveness and latency for a session.
-- `ssh_list_configured_hosts` reads `~/.ssh/config`.
-- `ssh_resolve_host` expands an SSH host alias into connection parameters.
-
-### Command tools
-
-#### `proc_exec`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "command": "ls -la /home",
-  "cwd": "/tmp",
-  "env": {
-    "DEBUG": "1"
-  },
-  "timeoutMs": 30000
-}
-```
-
-#### `proc_sudo`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "command": "systemctl restart nginx",
-  "password": "sudo-password",
-  "cwd": "/etc",
-  "timeoutMs": 30000
-}
-```
-
-Both return:
-
-```json
-{
-  "code": 0,
-  "stdout": "command output",
-  "stderr": "",
-  "durationMs": 245
-}
-```
-
-### File tools
-
-- `fs_read`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "path": "/etc/hosts",
-  "encoding": "utf8"
-}
-```
-
-- `fs_write`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "path": "/tmp/config.txt",
-  "data": "server_name example.com;\nlisten 80;",
-  "mode": 420
-}
-```
-
-- `fs_stat` returns `size`, `mtime`, `mode`, and `type`.
-- `fs_list` returns `{ "entries": [...], "nextToken": "optional" }`.
-- `fs_mkdirp` creates directories recursively.
-- `fs_rmrf` removes files or directories recursively.
-- `fs_rename` renames or moves a path.
-
-### Configuration and automation tools
-
-#### `ensure_package`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "name": "nginx",
-  "state": "present",
-  "sudoPassword": "optional"
-}
-```
-
-`state` supports `present` and `absent`.
-
-#### `ensure_service`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "name": "nginx",
-  "state": "restarted",
-  "sudoPassword": "optional"
-}
-```
-
-`state` supports `started`, `stopped`, `restarted`, `enabled`, and `disabled`.
-
-#### `ensure_lines_in_file`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "path": "/etc/hosts",
-  "lines": [
-    "192.168.1.10 db-server",
-    "192.168.1.20 cache-server"
-  ],
-  "state": "present",
-  "createIfMissing": true,
-  "sudoPassword": "optional"
-}
-```
-
-`state` supports `present` and `absent`.
-
-#### `patch_apply`
-
-```json
-{
-  "sessionId": "ssh-1645123456789-1",
-  "path": "/etc/hosts",
-  "diff": "@@ -1 +1 @@\n-old\n+new"
-}
-```
-
-#### `os_detect`
-
-Returns remote platform, distro, version, package manager, init system, shell, and temp directory.
-
-#### `get_metrics`
-
-Returns server metrics. Default output is JSON; optional `{ "format": "prometheus" }` emits Prometheus text format.
-
-## Authentication
-
-The server supports multiple authentication methods with automatic fallback:
-
-### Authentication Strategy Priority
-
-1. **Password** (if provided)
-2. **SSH Key** (inline → path → auto-discovery)
-3. **SSH Agent** (if available)
-
-### SSH Key Auto-Discovery
-
-The server automatically searches for SSH keys in:
-
-- `~/.ssh/id_ed25519`
-- `~/.ssh/id_rsa`
-- `~/.ssh/id_ecdsa`
-
-> **Note:** DSA keys (`id_dsa`) are no longer supported due to security concerns.
-
-Custom key directory: Set `SSH_DEFAULT_KEY_DIR` environment variable.
-
-### Examples
-
-**Password Authentication:**
-
-```json
-{
-  "host": "server.com",
-  "username": "admin",
-  "auth": "password",
-  "password": "secret"
-}
-```
-
-**SSH Key (inline):**
-
-```json
-{
-  "host": "server.com",
-  "username": "admin",
-  "auth": "key",
-  "privateKey": "-----BEGIN PRIVATE KEY-----\n...",
-  "passphrase": "optional"
-}
-```
-
-**SSH Key (file path):**
-
-```json
-{
-  "host": "server.com",
-  "username": "admin",
-  "auth": "key",
-  "privateKeyPath": "/home/user/.ssh/id_rsa"
-}
-```
-
-**SSH Agent:**
-
-```json
-{
-  "host": "server.com",
-  "username": "admin",
-  "auth": "agent"
-}
+printf '%s' 'super-secret-token' > .mcp-token
+mcp-ssh-tool --transport=http --host 127.0.0.1 --port 3000 --bearer-token-file .mcp-token
 ```
 
 ## Configuration
 
-### Environment Variables
+High-value environment variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LOG_LEVEL` | Logging level (`error`, `warn`, `info`, `debug`) | `info` |
-| `LOG_FORMAT` | Log output format (`plain`, `json`) | `plain` |
-| `STRICT_HOST_KEY_CHECKING` | Enable strict SSH host key verification | `false` |
-| `KNOWN_HOSTS_PATH` | Custom `known_hosts` file path | `~/.ssh/known_hosts` |
-| `SSH_DEFAULT_KEY_DIR` | SSH key search directory | `~/.ssh` |
-| `SSH_MCP_MAX_SESSIONS` | Maximum concurrent sessions | `20` |
-| `SSH_MCP_SESSION_TTL` | Session TTL in milliseconds | `900000` |
-| `SSH_MCP_COMMAND_TIMEOUT` | Default command timeout in milliseconds | `30000` |
-| `SSH_MCP_DEBUG` | Enable debug logging | `false` |
-| `SSH_MCP_RATE_LIMIT` | Enable rate limiting (`true` / `false`) | `true` |
-| `SSH_MCP_STRICT_HOST_KEY` | Legacy alias for strict host key verification | `false` |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SSH_MCP_POLICY_FILE` | unset | Canonical JSON policy source. |
+| `SSH_MCP_HOST_KEY_POLICY` | `strict` | `strict`, `accept-new`, or `insecure`. |
+| `SSH_MCP_KNOWN_HOSTS_PATH` | `~/.ssh/known_hosts` | Known-hosts file for strict verification. |
+| `SSH_MCP_MAX_FILE_SIZE` | `10485760` | Max bytes for `fs_read`. |
+| `SSH_MCP_COMMAND_TIMEOUT` | `30000` | Default command timeout. |
+| `SSH_MCP_HTTP_HOST` | `127.0.0.1` | Streamable HTTP bind host. |
+| `SSH_MCP_HTTP_PORT` / `PORT` | `3000` | Streamable HTTP port. |
+| `SSH_MCP_HTTP_BEARER_TOKEN_FILE` | unset | Required for non-loopback HTTP. |
+| `SSH_MCP_HTTP_ALLOWED_ORIGINS` | loopback origins | Comma-separated allowed origins. |
 
-### Default Settings
-
-- **Connection timeout:** 20 seconds
-- **Session TTL:** 15 minutes
-- **Max concurrent sessions:** 20
-- **Host key checking:** Relaxed (disabled by default)
-
-## Error Codes
-
-The server returns structured error codes for machine-readable error handling:
-
-- **EAUTH** - Authentication failed
-- **ECONN** - Connection error
-- **ETIMEOUT** - Operation timeout
-- **ENOSUDO** - Sudo operation failed
-- **EPMGR** - Package manager not found
-- **EFS** - File system operation failed
-- **EPATCH** - Patch application failed
-- **EBADREQ** - Invalid request parameters
-
-Each error includes:
-
-- `name`: Error class name
-- `code`: Machine-readable error code
-- `message`: Human-readable error message
-- `hint`: Optional suggestion for resolution
-
-## Security Features
-
-### Data Redaction
-
-Sensitive data is automatically redacted from logs:
-
-- Passwords
-- Private keys
-- Passphrases
-- Sudo passwords
-- SSH agent socket paths
-
-### Connection Security
-
-- Configurable host key verification
-- Support for known_hosts files
-- Connection timeout enforcement
-- Automatic session cleanup
-
-### Session Management
-
-- TTL-based session expiration
-- LRU cache eviction
-- Graceful connection cleanup
-- No persistent credential storage
-
-## Additional Documentation
-
-- [docs/configuration.md](docs/configuration.md) - environment variables, runtime modes, and example `.env` settings
-- [docs/security-model.md](docs/security-model.md) - redaction, host key verification, rate limiting, and safety guardrails
-- [docs/troubleshooting.md](docs/troubleshooting.md) - common setup, connection, and runtime issues
-- [CONTRIBUTING.md](CONTRIBUTING.md) - development workflow, integration tests, and Changesets release flow
+Deprecated aliases `STRICT_HOST_KEY_CHECKING` and `SSH_MCP_STRICT_HOST_KEY` are still accepted for one v2 compatibility cycle. Prefer `SSH_MCP_HOST_KEY_POLICY`.
 
 ## Development
 
-### Setup
-
 ```bash
-git clone https://github.com/oaslananka/mcp-ssh-tool.git
-cd mcp-ssh-tool
 npm install
-```
-
-### Scripts
-
-```bash
-npm run build      # Compile TypeScript
-npm run dev        # Watch mode compilation
-npm run test       # Run unit tests
-npm run test:integration  # Run integration tests (requires RUN_SSH_INTEGRATION=1)
-npm run test:e2e   # Run E2E tests (requires RUN_SSH_E2E=1)
-npm run lint       # Type-check (no emit)
-npm run format     # Run Prettier
-npm run test:coverage
-npm run licenses:check
-npm run pack:check
-npm run changeset
-npm run docs
-```
-
-### Testing
-
-**Unit Tests:**
-
-```bash
+npm run lint
 npm test
+npm run build
+npm run pack:check
+npm audit --audit-level=moderate
 ```
 
-**E2E Tests (optional):**
-
-```bash
-RUN_SSH_E2E=1 npm run test:e2e
-```
-
-**Integration Tests (optional):**
+Live SSH suites are opt-in:
 
 ```bash
 RUN_SSH_INTEGRATION=1 npm run test:integration
+RUN_SSH_E2E=1 npm run test:e2e
 ```
 
-## License
+## Documentation
 
-MIT License
-
-Copyright (c) 2025 Osman Aslan (oaslananka)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-E2E tests require a local Docker container or SSH server for testing.
-
-## Contributing
-
-1. Follow TypeScript and ESLint rules
-2. Add tests for new features
-3. Update documentation
-4. Ensure all tests pass
-5. Use conventional commit messages
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [SECURITY_DECISIONS.md](SECURITY_DECISIONS.md)
+- [MIGRATION.md](MIGRATION.md)
+- [docs/configuration.md](docs/configuration.md)
+- [docs/security-model.md](docs/security-model.md)
+- [docs/troubleshooting.md](docs/troubleshooting.md)
+- [docs/enterprise-deployment.md](docs/enterprise-deployment.md)
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## References
-
-- [Model Context Protocol](https://modelcontextprotocol.io)
-- [Anthropic MCP on GitHub](https://github.com/anthropics/mcp)
-- [Glama MCP Server Listing](https://glama.ai/mcp/servers/oaslananka/mcp-ssh-tool)
-- [LobeHub MCP Listing](https://lobehub.com/tr/mcp/oaslananka-mcp-ssh-tool)
-- [VS Code MCP Guide](https://code.visualstudio.com/docs/copilot/copilot-extensibility-overview) - VS Code Copilot extensibility
-- [GitHub Copilot](https://github.com/features/copilot) - GitHub Copilot documentation
+MIT License. See [LICENSE](LICENSE).

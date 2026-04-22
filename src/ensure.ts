@@ -74,6 +74,23 @@ function sanitizePackageName(name: string): string {
   return name;
 }
 
+function sanitizeServiceName(name: string): string {
+  const validServiceName = /^[a-zA-Z0-9][a-zA-Z0-9_.@:-]*$/;
+
+  if (!validServiceName.test(name)) {
+    throw createBadRequestError(
+      `Invalid service name: ${name}`,
+      "Service names must contain only letters, numbers, dots, dashes, underscores, colons, @, or path-safe instance names",
+    );
+  }
+
+  return name;
+}
+
+function shellQuote(value: string): string {
+  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
 function getRemoveCommand(pm: PackageManager, packageName: string): string {
   switch (pm) {
     case "apt":
@@ -223,7 +240,18 @@ export function createEnsureService({
         const result =
           pm === "brew"
             ? await processService.execCommand(sessionId, removeCommand)
-            : await processService.execSudo(sessionId, removeCommand, sudoPassword);
+            : await processService.execSudo(
+                sessionId,
+                removeCommand,
+                sudoPassword,
+                undefined,
+                undefined,
+                {
+                  policyAction: "ensure.package",
+                  rawSudo: false,
+                  destructive: true,
+                },
+              );
 
         const packageResult: PackageResult = {
           ok: result.code === 0,
@@ -273,7 +301,17 @@ export function createEnsureService({
       const result =
         pm === "brew"
           ? await processService.execCommand(sessionId, installCommand)
-          : await processService.execSudo(sessionId, installCommand, sudoPassword);
+          : await processService.execSudo(
+              sessionId,
+              installCommand,
+              sudoPassword,
+              undefined,
+              undefined,
+              {
+                policyAction: "ensure.package",
+                rawSudo: false,
+              },
+            );
 
       const packageResult: PackageResult = {
         ok: result.code === 0,
@@ -314,7 +352,8 @@ export function createEnsureService({
     state: "started" | "stopped" | "restarted" | "enabled" | "disabled",
     sudoPassword?: string,
   ): Promise<ServiceResult> {
-    logger.debug("Ensuring service state", { sessionId, serviceName, state });
+    const safeServiceName = sanitizeServiceName(serviceName);
+    logger.debug("Ensuring service state", { sessionId, serviceName: safeServiceName, state });
 
     const session = sessionManager.getSession(sessionId);
     if (!session) {
@@ -352,54 +391,65 @@ export function createEnsureService({
       if (initSystem === "systemd") {
         switch (state) {
           case "started":
-            command = `systemctl start ${serviceName}`;
+            command = `systemctl start ${safeServiceName}`;
             break;
           case "stopped":
-            command = `systemctl stop ${serviceName}`;
+            command = `systemctl stop ${safeServiceName}`;
             break;
           case "restarted":
-            command = `systemctl restart ${serviceName}`;
+            command = `systemctl restart ${safeServiceName}`;
             break;
           case "enabled":
-            command = `systemctl enable ${serviceName}`;
+            command = `systemctl enable ${safeServiceName}`;
             break;
           case "disabled":
-            command = `systemctl disable ${serviceName}`;
+            command = `systemctl disable ${safeServiceName}`;
             break;
         }
       } else {
         switch (state) {
           case "started":
-            command = `service ${serviceName} start`;
+            command = `service ${safeServiceName} start`;
             break;
           case "stopped":
-            command = `service ${serviceName} stop`;
+            command = `service ${safeServiceName} stop`;
             break;
           case "restarted":
-            command = `service ${serviceName} restart`;
+            command = `service ${safeServiceName} restart`;
             break;
           case "enabled":
-            command = `chkconfig ${serviceName} on || update-rc.d ${serviceName} enable`;
+            command = `chkconfig ${safeServiceName} on || update-rc.d ${safeServiceName} enable`;
             break;
           case "disabled":
-            command = `chkconfig ${serviceName} off || update-rc.d ${serviceName} disable`;
+            command = `chkconfig ${safeServiceName} off || update-rc.d ${safeServiceName} disable`;
             break;
         }
       }
 
-      const result = await processService.execSudo(sessionId, command, sudoPassword);
+      const result = await processService.execSudo(
+        sessionId,
+        command,
+        sudoPassword,
+        undefined,
+        undefined,
+        {
+          policyAction: "ensure.service",
+          rawSudo: false,
+          destructive: ["stopped", "restarted", "disabled"].includes(state),
+        },
+      );
       const serviceResult: ServiceResult = { ok: result.code === 0 };
 
       if (result.code === 0) {
         logger.info("Service state changed successfully", {
           sessionId,
-          serviceName,
+          serviceName: safeServiceName,
           state,
         });
       } else {
         logger.error("Service state change failed", {
           sessionId,
-          serviceName,
+          serviceName: safeServiceName,
           state,
           code: result.code,
           stderr: result.stderr,
@@ -410,7 +460,7 @@ export function createEnsureService({
     } catch (error) {
       logger.error("Failed to ensure service state", {
         sessionId,
-        serviceName,
+        serviceName: safeServiceName,
         state,
         error,
       });
@@ -478,8 +528,16 @@ export function createEnsureService({
 
           const moveResult = await processService.execSudo(
             sessionId,
-            `mv ${tempFile} ${filePath}`,
+            `mv ${shellQuote(tempFile)} ${shellQuote(filePath)}`,
             sudoPassword,
+            undefined,
+            undefined,
+            {
+              policyAction: "ensure.lines",
+              rawSudo: false,
+              path: filePath,
+              destructive: true,
+            },
           );
 
           if (moveResult.code !== 0) {
@@ -522,8 +580,16 @@ export function createEnsureService({
 
         const moveResult = await processService.execSudo(
           sessionId,
-          `mv ${tempFile} ${filePath}`,
+          `mv ${shellQuote(tempFile)} ${shellQuote(filePath)}`,
           sudoPassword,
+          undefined,
+          undefined,
+          {
+            policyAction: "ensure.lines",
+            rawSudo: false,
+            path: filePath,
+            destructive: true,
+          },
         );
 
         if (moveResult.code !== 0) {
@@ -577,7 +643,7 @@ export function createEnsureService({
       try {
         const testResult = await processService.execCommand(
           sessionId,
-          `patch --dry-run -p0 ${filePath} < ${tempPatchFile}`,
+          `patch --dry-run -p0 ${shellQuote(filePath)} < ${shellQuote(tempPatchFile)}`,
         );
 
         if (testResult.code !== 0) {
@@ -587,9 +653,21 @@ export function createEnsureService({
           );
         }
 
-        const applyCommand = `patch -p0 ${filePath} < ${tempPatchFile}`;
+        const applyCommand = `patch -p0 ${shellQuote(filePath)} < ${shellQuote(tempPatchFile)}`;
         const result = sudoPassword
-          ? await processService.execSudo(sessionId, applyCommand, sudoPassword)
+          ? await processService.execSudo(
+              sessionId,
+              applyCommand,
+              sudoPassword,
+              undefined,
+              undefined,
+              {
+                policyAction: "patch.apply",
+                rawSudo: false,
+                path: filePath,
+                destructive: true,
+              },
+            )
           : await processService.execCommand(sessionId, applyCommand);
 
         const patchResult: PatchResult = {
@@ -613,8 +691,8 @@ export function createEnsureService({
         try {
           const cleanupCommand =
             osInfo.platform === "windows"
-              ? `Remove-Item -Path ${tempPatchFile} -Force -ErrorAction SilentlyContinue`
-              : `rm -f ${tempPatchFile}`;
+              ? `Remove-Item -Path ${shellQuote(tempPatchFile)} -Force -ErrorAction SilentlyContinue`
+              : `rm -f ${shellQuote(tempPatchFile)}`;
           await processService.execCommand(sessionId, cleanupCommand);
         } catch (error) {
           logger.warn("Failed to clean up temporary patch file", {

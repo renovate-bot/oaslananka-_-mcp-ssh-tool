@@ -3,6 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { createTransferService, formatETA, formatSize, formatSpeed } from "../../src/transfer.js";
+import { createAllowPolicy, createSessionInfo, createTransferMetrics } from "./helpers.js";
 
 describe("createTransferService", () => {
   let tempDir = "";
@@ -26,15 +27,22 @@ describe("createTransferService", () => {
         callback: (err?: Error | null) => void,
       ) => callback(null),
     );
+    const readFile = jest.fn(
+      (_remotePath: string, callback: (err: Error | null, data: Buffer) => void) =>
+        callback(null, Buffer.from("hello world")),
+    );
     const onProgress = jest.fn();
 
     const service = createTransferService({
       sessionManager: {
         getSession: () =>
           ({
-            sftp: { writeFile },
+            info: createSessionInfo(),
+            sftp: { readFile, writeFile },
           }) as any,
       },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
     });
 
     const result = await service.uploadFileWithProgress(localPath, "/tmp/upload.txt", {
@@ -44,6 +52,7 @@ describe("createTransferService", () => {
 
     expect(result.success).toBe(true);
     expect(result.size).toBe(11);
+    expect(result.verified).toBe(true);
     expect(onProgress).toHaveBeenCalledWith(
       expect.objectContaining({
         percentage: 100,
@@ -60,6 +69,7 @@ describe("createTransferService", () => {
       sessionManager: {
         getSession: () =>
           ({
+            info: createSessionInfo(),
             sftp: {
               stat: (
                 _remotePath: string,
@@ -72,6 +82,8 @@ describe("createTransferService", () => {
             },
           }) as any,
       },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
     });
 
     const result = await service.downloadFileWithProgress("/tmp/remote.txt", localPath, {
@@ -80,6 +92,7 @@ describe("createTransferService", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.verified).toBe(true);
     expect(fs.readFileSync(localPath, "utf8")).toBe("hello");
     expect(onProgress).toHaveBeenCalled();
   });
@@ -87,8 +100,10 @@ describe("createTransferService", () => {
   test("rejects missing SFTP sessions", async () => {
     const service = createTransferService({
       sessionManager: {
-        getSession: () => ({ ssh: {} }) as any,
+        getSession: () => ({ info: createSessionInfo(), ssh: {} }) as any,
       },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
     });
 
     await expect(
@@ -101,6 +116,8 @@ describe("createTransferService", () => {
       sessionManager: {
         getSession: () => undefined,
       },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
     });
 
     await expect(
@@ -130,6 +147,7 @@ describe("createTransferService", () => {
       sessionManager: {
         getSession: () =>
           ({
+            info: createSessionInfo(),
             sftp: {
               writeFile: (
                 _remotePath: string,
@@ -140,6 +158,8 @@ describe("createTransferService", () => {
             },
           }) as any,
       },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
     });
 
     await expect(
@@ -152,6 +172,7 @@ describe("createTransferService", () => {
       sessionManager: {
         getSession: () =>
           ({
+            info: createSessionInfo(),
             sftp: {
               stat: (
                 _remotePath: string,
@@ -164,6 +185,8 @@ describe("createTransferService", () => {
             },
           }) as any,
       },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
     });
 
     await expect(

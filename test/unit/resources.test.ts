@@ -24,6 +24,9 @@ describe("resource helpers", () => {
         "mcp-ssh-tool://metrics/json",
         "mcp-ssh-tool://metrics/prometheus",
         "mcp-ssh-tool://ssh-config/hosts",
+        "mcp-ssh-tool://policy/effective",
+        "mcp-ssh-tool://audit/recent",
+        "mcp-ssh-tool://capabilities/support-matrix",
       ]),
     );
   });
@@ -41,6 +44,25 @@ describe("resource helpers", () => {
       }),
     );
     expect(prometheus.contents[0]?.text).toContain("ssh_mcp_sessions_created");
+  });
+
+  test("reads v2 policy, audit, and support matrix resources", async () => {
+    const policy = await readResource("mcp-ssh-tool://policy/effective", container);
+    const audit = await readResource("mcp-ssh-tool://audit/recent", container);
+    const support = await readResource("mcp-ssh-tool://capabilities/support-matrix", container);
+
+    expect(JSON.parse(policy.contents[0]?.text ?? "{}")).toEqual(
+      expect.objectContaining({
+        mode: "enforce",
+        allowRawSudo: false,
+      }),
+    );
+    expect(JSON.parse(audit.contents[0]?.text ?? "{}")).toEqual(
+      expect.objectContaining({
+        events: expect.any(Array),
+      }),
+    );
+    expect(support.contents[0]?.text).toContain("BusyBox/dropbear");
   });
 
   test("reads configured SSH hosts as JSON", async () => {

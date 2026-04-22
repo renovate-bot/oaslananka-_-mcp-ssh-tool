@@ -113,6 +113,62 @@ export function createBadRequestError(message: string, hint?: string): SSHMCPErr
 }
 
 /**
+ * Creates a policy denial error
+ */
+export function createPolicyError(message: string, hint?: string): SSHMCPError {
+  return new SSHMCPError(
+    ErrorCode.EPOLICY,
+    message,
+    hint,
+    "The operation was denied by the configured safety policy.",
+    false,
+    "Review the policy or run the request in explain mode before changing guardrails",
+  );
+}
+
+/**
+ * Creates a host key verification error
+ */
+export function createHostKeyError(message: string, hint?: string): SSHMCPError {
+  return new SSHMCPError(
+    ErrorCode.EHOSTKEY,
+    message,
+    hint,
+    "SSH host key verification failed.",
+    true,
+    "Verify known_hosts or expectedHostKeySha256 before reconnecting",
+  );
+}
+
+/**
+ * Creates a configured limit error
+ */
+export function createLimitError(message: string, hint?: string): SSHMCPError {
+  return new SSHMCPError(
+    ErrorCode.ELIMIT,
+    message,
+    hint,
+    "The operation exceeded a configured safety limit.",
+    false,
+    "Use a smaller request, transfer the file, or raise the configured limit intentionally",
+  );
+}
+
+/**
+ * Creates an unsupported platform/capability error
+ */
+export function createUnsupportedError(message: string, hint?: string): SSHMCPError {
+  return new SSHMCPError(
+    ErrorCode.EUNSUPPORTED,
+    message,
+    hint,
+    "The requested operation is not supported for this host or transport.",
+    false,
+    "Use a supported tool for this platform or check the capability resource",
+  );
+}
+
+/**
  * Wraps an unknown error into an SSH MCP error
  */
 export function wrapError(error: unknown, code: ErrorCode, hint?: string): SSHMCPError {

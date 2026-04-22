@@ -10,6 +10,17 @@ export interface PromptSuggestion {
   category: "session" | "command" | "file" | "system" | "package";
 }
 
+export interface MCPPromptDefinition {
+  name: string;
+  title: string;
+  description: string;
+  arguments?: Array<{
+    name: string;
+    description: string;
+    required?: boolean;
+  }>;
+}
+
 export const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
   // Session management
   {
@@ -85,6 +96,96 @@ export const PROMPT_SUGGESTIONS: PromptSuggestion[] = [
     category: "package",
   },
 ];
+
+export const MCP_PROMPTS: MCPPromptDefinition[] = [
+  {
+    name: "safe-connect",
+    title: "Safely connect to an SSH host",
+    description:
+      "Open an SSH session using strict host-key verification and explain the safety posture.",
+    arguments: [
+      { name: "host", description: "SSH hostname, IP, or configured host alias", required: true },
+      { name: "username", description: "SSH username", required: true },
+    ],
+  },
+  {
+    name: "inspect-host-capabilities",
+    title: "Inspect remote host capabilities",
+    description: "Detect OS, package manager, init system, SFTP availability, and active policy.",
+  },
+  {
+    name: "plan-mutation",
+    title: "Plan a remote change before executing",
+    description: "Use explain mode and policy resources to summarize a risky remote change first.",
+    arguments: [{ name: "goal", description: "Desired remote change", required: true }],
+  },
+  {
+    name: "managed-config-change",
+    title: "Apply a managed config change",
+    description:
+      "Read a config, produce a minimal patch, dry-run it, and apply only if policy allows it.",
+    arguments: [{ name: "path", description: "Remote configuration file path", required: true }],
+  },
+];
+
+export function listMCPPrompts() {
+  return {
+    prompts: MCP_PROMPTS.map((prompt) => ({ ...prompt })),
+  };
+}
+
+export function getMCPPrompt(name: string, args: Record<string, string> = {}) {
+  const prompt = MCP_PROMPTS.find((item) => item.name === name);
+  if (!prompt) {
+    throw new Error(`Unknown prompt: ${name}`);
+  }
+
+  const text = renderPrompt(name, args);
+  return {
+    description: prompt.description,
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text,
+        },
+      },
+    ],
+  };
+}
+
+function renderPrompt(name: string, args: Record<string, string>): string {
+  switch (name) {
+    case "safe-connect":
+      return [
+        "Open a safe SSH session using mcp-ssh-tool.",
+        `Host: ${args.host ?? "<host>"}`,
+        `Username: ${args.username ?? "<username>"}`,
+        "Prefer hostKeyPolicy=strict, verify known_hosts, and do not request root login unless policy explicitly allows it.",
+      ].join("\n");
+    case "inspect-host-capabilities":
+      return [
+        "Inspect the current SSH MCP environment.",
+        "List active sessions, read the effective policy resource, then run os_detect for the chosen session.",
+        "Summarize supported tools, SFTP availability, package manager, init system, and any policy restrictions.",
+      ].join("\n");
+    case "plan-mutation":
+      return [
+        `Goal: ${args.goal ?? "<describe change>"}`,
+        "Before executing, use explain mode or read policy resources to produce a concise action plan.",
+        "Call out destructive operations, sudo needs, path policy, rollback, and commands/files that would change.",
+      ].join("\n");
+    case "managed-config-change":
+      return [
+        `Remote file: ${args.path ?? "<path>"}`,
+        "Read the file, propose a minimal unified diff, dry-run the patch, then apply only if policy permits.",
+        "If the path is denied or the file is too large, stop and explain the safer alternative.",
+      ].join("\n");
+    default:
+      return "Use mcp-ssh-tool safely and prefer explain mode before mutations.";
+  }
+}
 
 /**
  * Get prompts by category

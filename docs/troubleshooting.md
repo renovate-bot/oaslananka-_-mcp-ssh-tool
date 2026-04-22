@@ -1,102 +1,118 @@
 # Troubleshooting
 
-This guide covers the most common issues when wiring `mcp-ssh-tool` into an MCP
-client or when opening SSH sessions against remote hosts.
+## The MCP Server Does Not Appear
 
-## The MCP server does not appear in my client
+1. Confirm Node.js is `>=22.14.0`.
+2. Confirm the command works: `mcp-ssh-tool --version`.
+3. Use stdio config for local clients:
 
-Checklist:
-
-1. Confirm the package is installed or reachable via `npx`.
-2. Verify the MCP client points to a stdio command such as `mcp-ssh-tool` or
-   `npx -y mcp-ssh-tool`.
-3. Restart the client after editing its MCP configuration.
-
-Useful checks:
-
-```bash
-mcp-ssh-tool --version
-codex mcp list
-codex mcp get ssh-mcp
+```json
+{
+  "servers": {
+    "ssh-mcp": {
+      "type": "stdio",
+      "command": "mcp-ssh-tool"
+    }
+  }
+}
 ```
 
-## Authentication fails
+Restart the MCP client after changing config.
 
-Common causes:
+## Host Key Verification Fails
 
-- wrong username or password
-- key file path does not exist
-- the SSH agent is not running
-- the target host rejects the offered auth method
-
-Things to verify:
+v2 uses strict host-key verification by default. Fix the trust root instead of disabling checks:
 
 ```bash
-ssh user@host
-echo $SSH_AUTH_SOCK
+ssh-keyscan -H example.com >> ~/.ssh/known_hosts
 ```
 
-If password auth works manually but not through the tool, check that the MCP
-client is actually passing the `password` field and that logs do not show a
-schema validation error.
+Then retry with `hostKeyPolicy: "strict"`. For one-off development targets, use `hostKeyPolicy: "accept-new"`. Use `hostKeyPolicy: "insecure"` only for disposable test environments.
 
-## Host key verification fails
+## Root Login Or Sudo Is Denied
 
-If you enabled strict host key checking and see host verification errors:
+This is expected in v2. Root login and raw `proc_sudo` are policy-controlled.
 
-1. Ensure `KNOWN_HOSTS_PATH` points to the correct file.
-2. Confirm the host key exists in that file.
-3. Retry with a manual SSH connection to capture the new fingerprint first.
+Safer options:
+
+- connect as an unprivileged user
+- use `ensure_package`, `ensure_service`, `ensure_lines_in_file`, or `patch_apply`
+- run `ssh_open_session` with `policyMode: "explain"` to see the policy verdict
+- enable `allowRawSudo` only in a reviewed policy file
+
+## A Destructive Command Is Denied
+
+Commands such as recursive deletes, shutdowns, reboots, disk formatting, or privilege-sensitive edits can be denied before execution. Review `mcp-ssh-tool://policy/effective` and `mcp-ssh-tool://audit/recent`.
+
+If the operation is intentional, prefer a narrower policy change such as a command allow-list or a path prefix instead of setting `allowDestructiveCommands=true` globally.
+
+## `fs_read` Says The File Is Too Large
+
+`fs_read` is text-focused and limited by `SSH_MCP_MAX_FILE_SIZE`. Use `file_download` for large files; it verifies SHA-256 integrity after transfer.
+
+## SFTP Is Unavailable
+
+BusyBox/dropbear and embedded targets often lack SFTP. The session can still open with `sftpAvailable: false`. Basic file tools fall back to portable shell probes where possible.
+
+If fallbacks fail, confirm the target has basic utilities:
 
 ```bash
-ssh -o StrictHostKeyChecking=accept-new user@host
+command -v cat mv rm mkdir ls stat wc
 ```
 
-## SFTP is unavailable on the target host
+## Streamable HTTP Refuses To Start
 
-Some embedded or BusyBox-style systems expose SSH command execution but not an
-SFTP subsystem. In that case:
+Non-loopback HTTP is refused unless both are configured:
 
-- `ssh_open_session` can still succeed
-- the result may show `sftpAvailable: false`
-- core `fs_*` tools automatically fall back to shell-based implementations
-
-If file tools fail on such a host, verify that common shell utilities like
-`cat`, `mv`, `rm`, `mkdir`, and `ls` are present.
-
-## Package or service helpers fail on Windows targets
-
-`ensure_package` and `ensure_service` are intentionally Unix-oriented helpers.
-On Windows targets, prefer:
-
-- `proc_exec`
-- `proc_sudo` where appropriate
-- `fs_*` tools for file operations
-
-## E2E tests do not run
-
-`npm run test:e2e` intentionally skips live SSH tests unless
-`RUN_SSH_E2E=1` is set.
+- bearer token file
+- allowed origins
 
 Example:
 
 ```bash
+printf '%s' 'replace-me' > .mcp-token
+mcp-ssh-tool --transport=http --host 127.0.0.1 --port 3000 --bearer-token-file .mcp-token
+```
+
+For remote exposure, keep the server behind a reverse proxy with TLS and authentication.
+
+## Legacy SSE Client Fails
+
+SSE compatibility is disabled by default. Enable it only during migration:
+
+```bash
+mcp-ssh-tool --transport=http --enable-legacy-sse
+```
+
+Prefer Streamable HTTP at `/mcp`.
+
+## Tests
+
+Unit tests:
+
+```bash
+npm test
+```
+
+Live SSH suites are opt-in:
+
+```bash
+RUN_SSH_INTEGRATION=1 npm run test:integration
 RUN_SSH_E2E=1 npm run test:e2e
 ```
 
-If Docker-backed tests are involved, ensure the SSH fixture container is up:
+Docker fixture:
 
 ```bash
 npm run e2e:docker
 ```
 
-## CI fails on `npm audit`
+## Security Audit Fails
 
-The Azure pipeline treats `npm audit --audit-level=moderate` as a blocking
-check. If it fails:
+Run:
 
-1. run `npm audit --audit-level=moderate` locally
-2. inspect whether the issue is direct or transitive
-3. upgrade the affected dependency or pin a safe range
-4. if the advisory is clearly non-exploitable, document the rationale before
-   relaxing policy
+```bash
+npm audit --audit-level=moderate
+```
+
+Upgrade direct dependencies first. For transitive advisories, prefer dependency updates or overrides with a short security rationale in the release notes.
