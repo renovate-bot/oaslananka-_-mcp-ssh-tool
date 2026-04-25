@@ -212,7 +212,7 @@ Local quality gates are layered:
 
 ## CI/CD Ownership
 
-The personal repository `https://github.com/oaslananka/mcp-ssh-tool` is the main source repository. Automatic CI/CD and trusted npm publishing run from the organization mirror `https://github.com/oaslananka-lab/mcp-ssh-tool`; Azure, GitLab, and personal GitHub release actions are manual-only.
+The personal repository `https://github.com/oaslananka/mcp-ssh-tool` is the main source repository. Automatic CI/CD and trusted npm publishing run from the organization mirror `https://github.com/oaslananka-lab/mcp-ssh-tool`; Azure, GitLab, and personal GitHub release actions are manual-only. The npm package `repository.url` intentionally points at the org mirror so npm provenance can verify that the published artifact came from the same repository that built it.
 
 See [docs/ci-cd-topology.md](docs/ci-cd-topology.md) for mirror secrets, release flow, and manual fallback guidance.
 

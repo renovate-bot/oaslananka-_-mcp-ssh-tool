@@ -11,7 +11,7 @@
 | GitLab mirror | Optional source mirror | Manual-only pipeline from GitLab web UI. |
 | Azure DevOps project | Manual validation and release-control backup | Manual-only YAML pipelines. |
 
-The same source code is pushed to both GitHub repositories. The personal repository remains the canonical development home; the org repository is the automated validation and provenance boundary.
+The same source code is pushed to both GitHub repositories. The personal repository remains the canonical development home; the org repository is the automated validation and provenance boundary. The npm package `repository.url` intentionally points at the org mirror because npm provenance requires the package metadata repository to match the GitHub Actions repository that signs the artifact.
 
 ## GitHub Workflows
 

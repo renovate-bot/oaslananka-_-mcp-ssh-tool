@@ -78,7 +78,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oaslananka/mcp-ssh-tool.git"
+    "url": "git+https://github.com/oaslananka-lab/mcp-ssh-tool.git"
   },
   "homepage": "https://github.com/oaslananka/mcp-ssh-tool#readme",
   "bugs": {
