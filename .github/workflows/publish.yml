@@ -68,13 +68,16 @@ jobs:
             exit 1
           fi
 
-      - name: Guard version is unpublished
+      - name: Check npm publication state
+        id: npm_status
         run: |
           PKG_NAME="$(node -p "require('./package.json').name")"
           PKG_VER="$(node -p "require('./package.json').version")"
           if npm view "${PKG_NAME}@${PKG_VER}" version --silent >/dev/null 2>&1; then
-            echo "ERROR: ${PKG_NAME}@${PKG_VER} already exists on npm."
-            exit 1
+            echo "${PKG_NAME}@${PKG_VER} already exists on npm; continuing with registry and release completion."
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Verify release quality
@@ -101,6 +104,7 @@ jobs:
           sbom-path: artifacts/sbom.cdx.json
 
       - name: Publish to npm using Doppler-injected token
+        if: ${{ steps.npm_status.outputs.already_published != 'true' }}
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
           PACKAGE_FILE: ${{ steps.pack.outputs.package_file }}
