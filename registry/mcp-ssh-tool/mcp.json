@@ -2,7 +2,7 @@
   "name": "mcp-ssh-tool",
   "display_name": "SSH MCP Tool",
   "description": "Production-grade MCP SSH automation server with secure defaults, policy enforcement, resources, prompts, stdio, and Streamable HTTP support.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "Osman Aslan",
   "license": "MIT",
   "runtime": "node",

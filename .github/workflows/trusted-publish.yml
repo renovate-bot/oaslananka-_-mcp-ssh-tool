@@ -94,7 +94,9 @@ jobs:
       - name: Publish to npm with trusted publishing
         env:
           PACKAGE_FILE: ${{ steps.pack.outputs.package_file }}
-        run: npm publish "artifacts/${PACKAGE_FILE}" --access public
+        run: |
+          unset NODE_AUTH_TOKEN NPM_CONFIG_USERCONFIG
+          npm publish "./artifacts/${PACKAGE_FILE}" --access public
 
       - name: Publish MCP Registry metadata
         run: |

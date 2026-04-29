@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-29
+
+### Added
+
+- Org-only hardening workflows with merge queue support, branch hygiene reporting, CycloneDX SBOM artifacts, test-result publishing, and stricter security scanning.
+- Doppler-first secret inventory and verification scripts so release and coverage secrets are injected at runtime instead of stored as individual GitHub secrets.
+- Local parity tooling with `Taskfile.yml`, pre-commit configuration, tracked `.githooks`, and a dry-run repository cleanup helper.
+- MCP Registry publication in the trusted release path after npm publication.
+
+### Changed
+
+- Replaced personal-repo mirroring with organization pull/sync automation and guarded every GitHub Actions job to run only in `oaslananka-lab/mcp-ssh-tool`.
+- Modernized the trusted publish path with Node 24-compatible actions, artifact attestations, npm provenance, GitHub Release creation, and org-to-canonical release metadata mirroring.
+- Reworked security jobs to remove Node 20-deprecated action paths by running Gitleaks, Trivy, and OSV through pinned CLI containers where needed.
+- Refreshed dependency automation, issue forms, README badges, operational runbooks, branch protection guidance, release docs, troubleshooting, threat model, and API stability documentation.
+
+### Security
+
+- Added fail-closed CodeQL, Gitleaks, Trivy, Hadolint, Zizmor, OSV, dependency review, and Scorecard coverage for the organization repository.
+- Hardened Docker images to run as the non-root `node` user after build.
+
 ## [2.0.0] - 2026-04-22
 
 ### Added
@@ -165,6 +186,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LRU session cache with TTL
 - Sensitive data redaction in logs
 
+[2.1.0]: https://github.com/oaslananka-lab/mcp-ssh-tool/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/oaslananka-lab/mcp-ssh-tool/releases/tag/v2.0.0
 [1.3.5]: https://github.com/oaslananka/mcp-ssh-tool/releases/tag/v1.3.5
 [1.3.3]: https://github.com/oaslananka/mcp-ssh-tool/releases/tag/v1.3.3
 [1.0.0]: https://github.com/oaslananka/mcp-ssh-tool/releases/tag/v1.0.0
