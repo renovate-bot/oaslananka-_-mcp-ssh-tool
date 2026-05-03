@@ -75,7 +75,7 @@ jobs:
         with:
           results_file: scorecard.sarif
           results_format: sarif
-          publish_results: true
+          publish_results: false
       - uses: actions/upload-artifact@v6
         if: always()
         with:

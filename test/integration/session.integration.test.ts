@@ -38,6 +38,8 @@ integrationDescribe("SSH integration tests", () => {
         commandDeny: [],
         pathAllowPrefixes: ["/tmp"],
         pathDenyPrefixes: [],
+        localPathAllowPrefixes: [os.tmpdir()],
+        localPathDenyPrefixes: [],
       },
     });
     processService = createProcessService({
