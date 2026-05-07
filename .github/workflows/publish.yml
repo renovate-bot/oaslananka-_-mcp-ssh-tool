@@ -75,10 +75,11 @@ jobs:
           PKG_VER="$(node -p "require('./package.json').version")"
           if npm view "${PKG_NAME}@${PKG_VER}" version --silent >/dev/null 2>&1; then
             echo "${PKG_NAME}@${PKG_VER} already exists on npm; continuing with registry and release completion."
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            already_published=true
           else
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            already_published=false
           fi
+          echo "already_published=${already_published}" >> "$GITHUB_OUTPUT"
 
       - name: Verify release quality
         run: npm run check
@@ -115,10 +116,11 @@ jobs:
           )" || LATEST_VER=""
           if [ "$LATEST_VER" = "$PKG_VER" ]; then
             echo "${SERVER_NAME}@${PKG_VER} already exists in the MCP Registry."
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            already_published=true
           else
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            already_published=false
           fi
+          echo "already_published=${already_published}" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm using Doppler-injected token
         if: ${{ steps.npm_status.outputs.already_published != 'true' }}

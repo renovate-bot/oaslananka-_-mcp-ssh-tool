@@ -76,9 +76,11 @@ jobs:
             echo "Requested version $RELEASE_VERSION does not match package.json v${PKG_VER}."
             exit 1
           fi
-          echo "package_name=${PKG_NAME}" >> "$GITHUB_OUTPUT"
-          echo "package_version=${PKG_VER}" >> "$GITHUB_OUTPUT"
-          echo "server_name=${SERVER_NAME}" >> "$GITHUB_OUTPUT"
+          {
+            echo "package_name=${PKG_NAME}"
+            echo "package_version=${PKG_VER}"
+            echo "server_name=${SERVER_NAME}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check npm publication state
         id: npm_status
@@ -88,11 +90,12 @@ jobs:
           PKG_VER="${{ steps.metadata.outputs.package_version }}"
           if npm view "${PKG_NAME}@${PKG_VER}" version --silent >/dev/null 2>&1; then
             echo "${PKG_NAME}@${PKG_VER} already exists on npm."
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            already_published=true
           else
             echo "${PKG_NAME}@${PKG_VER} is not published on npm."
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            already_published=false
           fi
+          echo "already_published=${already_published}" >> "$GITHUB_OUTPUT"
 
       - name: Check MCP Registry publication state
         id: registry_status
@@ -107,11 +110,12 @@ jobs:
           )" || LATEST_VER=""
           if [ "$LATEST_VER" = "$PKG_VER" ]; then
             echo "${SERVER_NAME}@${PKG_VER} already exists in the MCP Registry."
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            already_published=true
           else
             echo "${SERVER_NAME}@${PKG_VER} is not the MCP Registry latest version."
-            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            already_published=false
           fi
+          echo "already_published=${already_published}" >> "$GITHUB_OUTPUT"
 
       - name: Verify release quality
         run: npm run check

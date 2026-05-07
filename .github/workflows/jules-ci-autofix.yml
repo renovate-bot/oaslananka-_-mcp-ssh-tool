@@ -86,6 +86,14 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           }
 
+          skip_with_reason() {
+            {
+              echo "skip=true"
+              echo "skip_reason=$1"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
           mode="${MANUAL_MODE:-ci-failure}"
 
           if [[ "$EVENT_NAME" == "issues" ]]; then
@@ -99,17 +107,13 @@ jobs:
 
           if [[ "$mode" == "issue" ]]; then
             if [[ -z "${issue_number}" ]]; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "skip_reason=missing_issue_number" >> "$GITHUB_OUTPUT"
-              exit 0
+              skip_with_reason "missing_issue_number"
             fi
 
             gh issue view "$issue_number" --repo "$REPO" --json number,title,body,author,labels,url > .jules-ci/issue.json
             author="$(jq -r '.author.login // ""' .jules-ci/issue.json)"
             if ! is_trusted_author "$author"; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "skip_reason=untrusted_issue_author_${author}" >> "$GITHUB_OUTPUT"
-              exit 0
+              skip_with_reason "untrusted_issue_author_${author}"
             fi
 
             python3 - <<'PY'
@@ -158,9 +162,7 @@ jobs:
 
           run_id="$MANUAL_RUN_ID"
           if [[ -z "${run_id}" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=missing_run_id" >> "$GITHUB_OUTPUT"
-            exit 0
+            skip_with_reason "missing_run_id"
           fi
 
           gh api "repos/${REPO}/actions/runs/${run_id}" > .jules-ci/run.json
@@ -172,27 +174,19 @@ jobs:
           head_repo="$(jq -r '.head_repository.full_name // ""' .jules-ci/run.json)"
 
           if [[ "$conclusion" != "failure" && "$conclusion" != "timed_out" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=non_failure_conclusion_${conclusion}" >> "$GITHUB_OUTPUT"
-            exit 0
+            skip_with_reason "non_failure_conclusion_${conclusion}"
           fi
 
           if [[ "$workflow_name" == Jules* || "$workflow_name" == *Publish* || "$workflow_name" == *Release* ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=blocked_workflow_${workflow_name// /_}" >> "$GITHUB_OUTPUT"
-            exit 0
+            skip_with_reason "blocked_workflow_${workflow_name// /_}"
           fi
 
           if [[ "$head_repo" != "$REPO" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=fork_or_external_head_repo" >> "$GITHUB_OUTPUT"
-            exit 0
+            skip_with_reason "fork_or_external_head_repo"
           fi
 
           if [[ -z "$head_branch" || "$head_branch" == "null" || "$head_branch" == jules/* ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=blocked_or_missing_head_branch" >> "$GITHUB_OUTPUT"
-            exit 0
+            skip_with_reason "blocked_or_missing_head_branch"
           fi
 
           if [[ "$MAX_AUTOFIX_ATTEMPTS" != "0" ]]; then
@@ -208,9 +202,7 @@ jobs:
                 .jules-ci/recent-runs.json
             )"
             if (( failed_count > MAX_AUTOFIX_ATTEMPTS )); then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "skip_reason=max_attempts_exceeded_${failed_count}" >> "$GITHUB_OUTPUT"
-              exit 0
+              skip_with_reason "max_attempts_exceeded_${failed_count}"
             fi
           fi
 
@@ -300,5 +292,7 @@ jobs:
 
       - name: Report skipped Jules run
         if: steps.ctx.outputs.skip == 'true'
+        env:
+          SKIP_REASON: ${{ steps.ctx.outputs.skip_reason }}
         run: |
-          echo "Jules skipped: ${{ steps.ctx.outputs.skip_reason }}"
+          echo "Jules skipped: ${SKIP_REASON}"
