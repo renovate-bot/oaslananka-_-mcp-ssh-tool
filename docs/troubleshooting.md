@@ -23,7 +23,7 @@ npm provenance validates the package metadata repository against the GitHub Acti
 
 ### MCP Registry still shows an old version
 
-The registry is updated by `trusted-publish.yml` after npm publication. Verify the workflow ran `mcp-publisher login github -token "$DOPPLER_GITHUB_SERVICE_TOKEN"` through Doppler and `mcp-publisher publish`, then check:
+The registry is updated by `trusted-publish.yml` after npm publication. Verify the workflow ran the pinned `scripts/install-mcp-publisher.sh` path, authenticated with `mcp-publisher login github --token "$DOPPLER_GITHUB_SERVICE_TOKEN"` through Doppler, ran `mcp-publisher publish`, and then checked the latest endpoint:
 
 ```bash
 curl https://registry.modelcontextprotocol.io/v0.1/servers/io.github.oaslananka%2Fmcp-ssh-tool/versions/latest

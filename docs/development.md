@@ -29,6 +29,18 @@ task security:local
 
 Missing tools such as `actionlint`, `zizmor`, `gitleaks`, `trivy`, `hadolint`, `osv-scanner`, `safety`, or `doppler` should be recorded as caveats rather than weakening CI requirements.
 
+## Dependency Overrides
+
+Keep overrides narrow and documented. Current overrides pin transitive HTTP/protobuf packages to patched versions used by `@modelcontextprotocol/sdk`:
+
+- `hono`
+- `@hono/node-server`
+- `express-rate-limit`
+- `ip-address`
+- `protobufjs`
+
+Run `npm audit --audit-level=moderate` after changing any override.
+
 ## Hooks
 
 `npm run prepare` configures `core.hooksPath=.githooks`. The tracked hooks run existing npm hook scripts and then invoke `.pre-commit-config.yaml` through `pre-commit` when that binary is installed.

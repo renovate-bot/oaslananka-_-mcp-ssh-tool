@@ -2,18 +2,18 @@
 
 ## Repository Operations
 
-- Canonical source: `https://github.com/oaslananka/mcp-ssh-tool`
-- Automation and release boundary: `https://github.com/oaslananka-lab/mcp-ssh-tool`
-- Local Azure remote in some checkouts may be named `origin`; use `github` for canonical GitHub pushes.
+- Canonical source and release boundary: `https://github.com/oaslananka-lab/mcp-ssh-tool`
+- Personal showcase mirror: `https://github.com/oaslananka/mcp-ssh-tool`
+- Local remotes may differ by checkout; push PR branches to the org remote.
 
-Create release hardening branches from canonical source:
+Create release hardening branches from org `main`:
 
 ```bash
-git switch -c chore/v2.1.0-hardening
-git push -u github chore/v2.1.0-hardening
+git switch -c chore/v2.1.2-hardening
+git push -u lab chore/v2.1.2-hardening
 ```
 
-The org repository should be updated by running `Sync From Canonical` in `oaslananka-lab/mcp-ssh-tool`, not by personal-repo push workflows.
+The personal mirror is updated only by `mirror-personal.yml`, which defaults to dry-run and mirrors org `main` plus `v*.*.*` tags.
 
 ## Runtime Operations
 

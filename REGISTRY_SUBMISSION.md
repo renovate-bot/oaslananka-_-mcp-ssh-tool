@@ -1,11 +1,11 @@
 ## MCP SSH Tool - Registry Submission
 
-- **Repository:** https://github.com/oaslananka/mcp-ssh-tool
+- **Repository:** https://github.com/oaslananka-lab/mcp-ssh-tool
 - **NPM Package:** mcp-ssh-tool
 - **Command:** `mcp-ssh-tool`
 - **Entrypoint:** `dist/index.js`
 - **Runtime:** node (`22.22.2+` or `24.14.1+`)
-- **Transport:** stdio
+- **Transport:** stdio plus loopback Streamable HTTP metadata in `server.json`
 - **Supported Platforms:** linux, macos, windows
 - **Capabilities:** tools (true), resources (true), prompts (true)
 

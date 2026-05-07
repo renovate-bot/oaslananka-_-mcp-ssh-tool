@@ -25,6 +25,20 @@ const TOOL_ALIASES: Record<string, string> = {
   "ssh.resolveHost": "ssh_resolve_host",
 };
 
+function errorResult(payload: Record<string, unknown>): ToolCallResult {
+  const structuredContent = { error: true, ...payload };
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(structuredContent, null, 2),
+      },
+    ],
+    structuredContent,
+    isError: true,
+  };
+}
+
 export class ToolRegistry {
   private readonly providers = new Map<string, ToolProvider>();
 
@@ -74,7 +88,10 @@ export class ToolRegistry {
           structuredContent,
         };
       } catch (error) {
-        logger.error("Tool handler error", { toolName, error });
+        logger.error("Tool handler error", {
+          toolName,
+          error: error instanceof Error ? error.message : String(error),
+        });
 
         if (
           error &&
@@ -83,38 +100,14 @@ export class ToolRegistry {
           typeof error.toJSON === "function"
         ) {
           const structuredError = error.toJSON() as Record<string, unknown>;
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify({ error: true, ...structuredError }, null, 2),
-              },
-            ],
-            isError: true,
-          };
+          return errorResult(structuredError);
         }
 
         const message = error instanceof Error ? error.message : String(error);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ error: true, message }, null, 2),
-            },
-          ],
-          isError: true,
-        };
+        return errorResult({ message });
       }
     }
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ error: true, message: `Unknown tool: ${toolName}` }, null, 2),
-        },
-      ],
-      isError: true,
-    };
+    return errorResult({ message: `Unknown tool: ${toolName}` });
   }
 }

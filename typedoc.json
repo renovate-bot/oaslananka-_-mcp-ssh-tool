@@ -9,5 +9,6 @@
   "readme": "README.md",
   "plugin": [],
   "name": "mcp-ssh-tool API",
-  "includeVersion": true
+  "includeVersion": true,
+  "sourceLinkTemplate": "https://github.com/oaslananka-lab/mcp-ssh-tool/blob/{gitRevision}/{path}#L{line}"
 }

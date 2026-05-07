@@ -196,6 +196,7 @@ High-value environment variables:
 | `SSH_MCP_COMMAND_TIMEOUT` | `30000` | Default command timeout. |
 | `SSH_MCP_HTTP_HOST` | `127.0.0.1` | Streamable HTTP bind host. |
 | `SSH_MCP_HTTP_PORT` / `PORT` | `3000` | Streamable HTTP port. |
+| `SSH_MCP_HTTP_MAX_REQUEST_BODY_BYTES` | `1048576` | Max JSON request bytes accepted by Streamable HTTP. |
 | `SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES` | OS temp directory | Local transfer allow-list for `file_upload` and `file_download`. |
 | `SSH_MCP_HTTP_BEARER_TOKEN_FILE` | unset | Required for non-loopback HTTP. |
 | `SSH_MCP_HTTP_ALLOWED_ORIGINS` | loopback origins | Comma-separated allowed origins. |
@@ -227,11 +228,15 @@ Local quality gates are layered:
 
 ## CI/CD Ownership
 
-The personal repository `https://github.com/oaslananka/mcp-ssh-tool` is the canonical source repository. Automatic CI/CD, supply-chain security checks, trusted npm publishing, and MCP Registry publishing run only from `https://github.com/oaslananka-lab/mcp-ssh-tool`. The org repository pulls from canonical source; personal-repo push and publish workflows are disabled.
+The organization repository `https://github.com/oaslananka-lab/mcp-ssh-tool` is the canonical source-of-truth. Automatic CI/CD, supply-chain security checks, trusted npm publishing, MCP Registry publishing, GitHub Releases, Docker image validation, SBOMs, attestations, and release decisions run only from the org repository.
+
+The personal repository `https://github.com/oaslananka/mcp-ssh-tool` is a showcase mirror only. It must not contain publish workflows or require GitHub Actions for package or registry release authority. If the two repositories ever conflict, the org repository wins.
 
 The npm package `repository.url` intentionally points at the org repository so npm provenance can verify that the published artifact came from the same GitHub Actions repository that built it.
 
-See [docs/ci-cd-topology.md](docs/ci-cd-topology.md) for org sync, release flow, and manual fallback guidance.
+The MCP Registry server name remains `io.github.oaslananka/mcp-ssh-tool` because it is already published and changing it would break existing users. Registry metadata points its repository/source at the org repository where the current official schema permits it.
+
+See [docs/ci-cd-topology.md](docs/ci-cd-topology.md) for mirror, release, dry-run, and manual fallback guidance.
 
 ## Documentation
 
@@ -241,8 +246,19 @@ See [docs/ci-cd-topology.md](docs/ci-cd-topology.md) for org sync, release flow,
 - [docs/ci-cd-topology.md](docs/ci-cd-topology.md)
 - [docs/development.md](docs/development.md)
 - [docs/release.md](docs/release.md)
+- [docs/publishing.md](docs/publishing.md)
+- [docs/npm-provenance.md](docs/npm-provenance.md)
+- [docs/mcp-registry.md](docs/mcp-registry.md)
+- [docs/chatgpt-app.md](docs/chatgpt-app.md)
 - [docs/doppler.md](docs/doppler.md)
 - [docs/operations.md](docs/operations.md)
+- [docs/repository-operations.md](docs/repository-operations.md)
+- [docs/docker.md](docs/docker.md)
+- [docs/client-configs.md](docs/client-configs.md)
+- [docs/automation/jules.md](docs/automation/jules.md)
+- [docs/security/release-integrity.md](docs/security/release-integrity.md)
+- [docs/security/chatgpt-app-threat-model.md](docs/security/chatgpt-app-threat-model.md)
+- [docs/security/ssh-threat-model.md](docs/security/ssh-threat-model.md)
 - [docs/branch-protection.md](docs/branch-protection.md)
 - [docs/maintenance-policy.md](docs/maintenance-policy.md)
 - [docs/api-stability.md](docs/api-stability.md)

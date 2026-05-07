@@ -11,6 +11,7 @@ import { createContainer } from "./container.js";
 import { SERVER_VERSION, SSHMCPServer } from "./mcp.js";
 import { logger } from "./logging.js";
 import { initTelemetry, shutdownTelemetry, withSpan } from "./telemetry.js";
+import { corsHeaders, isOriginAllowed, validateHttpStartupConfig } from "./http-security.js";
 
 type HttpTransport = StreamableHTTPServerTransport | SSEServerTransport;
 
@@ -31,39 +32,29 @@ const bearerToken = httpConfig.bearerTokenFile
 
 initTelemetry({ serviceVersion: SERVER_VERSION });
 
-function isLoopbackHost(host: string): boolean {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-
-function validateStartupConfig(): void {
-  if (httpConfig.bearerTokenFile && bearerToken?.length === 0) {
-    throw new Error("Refusing HTTP MCP startup with an empty bearer token file");
-  }
-
-  if (isLoopbackHost(httpConfig.host)) {
-    return;
-  }
-
-  if (!bearerToken || httpConfig.allowedOrigins.length === 0) {
-    throw new Error(
-      "Refusing non-loopback HTTP MCP binding without SSH_MCP_HTTP_BEARER_TOKEN_FILE and SSH_MCP_HTTP_ALLOWED_ORIGINS",
-    );
+class RequestBodyTooLargeError extends Error {
+  constructor() {
+    super("Request body is too large");
   }
 }
 
-function sendJson(res: ServerResponse, statusCode: number, payload: Record<string, unknown>) {
-  res.writeHead(statusCode, { "Content-Type": "application/json" });
+function sendJson(
+  req: IncomingMessage,
+  res: ServerResponse,
+  statusCode: number,
+  payload: Record<string, unknown>,
+) {
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json",
+    ...corsHeaders(req.headers.origin, httpConfig.allowedOrigins),
+  });
   res.end(JSON.stringify(payload, null, 2));
 }
 
 function rejectIfUnauthorized(req: IncomingMessage, res: ServerResponse): boolean {
   const origin = req.headers.origin;
-  if (
-    origin &&
-    httpConfig.allowedOrigins.length > 0 &&
-    !httpConfig.allowedOrigins.includes(origin)
-  ) {
-    sendJson(res, 403, { error: "Origin is not allowed" });
+  if (!isOriginAllowed(origin, httpConfig.allowedOrigins)) {
+    sendJson(req, res, 403, { error: "Origin is not allowed" });
     return true;
   }
 
@@ -72,7 +63,7 @@ function rejectIfUnauthorized(req: IncomingMessage, res: ServerResponse): boolea
   }
 
   if (!isBearerAuthorizationValid(req.headers.authorization, bearerToken)) {
-    sendJson(res, 401, { error: "Missing or invalid bearer token" });
+    sendJson(req, res, 401, { error: "Missing or invalid bearer token" });
     return true;
   }
 
@@ -81,8 +72,14 @@ function rejectIfUnauthorized(req: IncomingMessage, res: ServerResponse): boolea
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.byteLength;
+    if (size > httpConfig.maxRequestBodyBytes) {
+      throw new RequestBodyTooLargeError();
+    }
+    chunks.push(buffer);
   }
 
   if (chunks.length === 0) {
@@ -135,7 +132,7 @@ async function handleStreamableRequest(
       }
 
       if (!session) {
-        sendJson(res, 400, {
+        sendJson(req, res, 400, {
           jsonrpc: "2.0",
           error: {
             code: -32000,
@@ -147,7 +144,7 @@ async function handleStreamableRequest(
       }
 
       if (!(session.transport instanceof StreamableHTTPServerTransport)) {
-        sendJson(res, 400, {
+        sendJson(req, res, 400, {
           error: "Session exists but uses a different transport protocol",
         });
         return;
@@ -186,29 +183,33 @@ async function handleLegacyMessage(req: IncomingMessage, res: ServerResponse): P
   const requestUrl = new URL(req.url ?? legacyMessageEndpoint, baseUrl);
   const sessionId = requestUrl.searchParams.get("sessionId");
   if (!sessionId) {
-    sendJson(res, 400, { error: "Missing sessionId query parameter" });
+    sendJson(req, res, 400, { error: "Missing sessionId query parameter" });
     return;
   }
 
   const session = sessions.get(sessionId);
   if (!session || !(session.transport instanceof SSEServerTransport)) {
-    sendJson(res, 404, { error: "Legacy SSE session not found" });
+    sendJson(req, res, 404, { error: "Legacy SSE session not found" });
     return;
   }
 
   await session.transport.handlePostMessage(req, res);
 }
 
-validateStartupConfig();
+validateHttpStartupConfig(httpConfig, bearerToken);
 
 const httpServer = createServer((req, res) => {
   void (async () => {
     try {
       const requestUrl = new URL(req.url ?? endpoint, "http://localhost");
 
-      if (requestUrl.pathname === "/.well-known/openai-apps-challenge") {
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end("cxYvVGiJrMx7VjCg1z8KmodNB6dR7RyPLWpW7Lcy2Kg");
+      if (requestUrl.pathname === endpoint && req.method === "OPTIONS") {
+        if (!isOriginAllowed(req.headers.origin, httpConfig.allowedOrigins)) {
+          sendJson(req, res, 403, { error: "Origin is not allowed" });
+          return;
+        }
+        res.writeHead(204, corsHeaders(req.headers.origin, httpConfig.allowedOrigins));
+        res.end();
         return;
       }
 
@@ -218,7 +219,7 @@ const httpServer = createServer((req, res) => {
 
       if (requestUrl.pathname === endpoint) {
         if (req.method !== "GET" && req.method !== "POST" && req.method !== "DELETE") {
-          sendJson(res, 405, { error: "Method not allowed" });
+          sendJson(req, res, 405, { error: "Method not allowed" });
           return;
         }
 
@@ -229,7 +230,7 @@ const httpServer = createServer((req, res) => {
 
       if (httpConfig.enableLegacySse && requestUrl.pathname === legacySseEndpoint) {
         if (req.method !== "GET") {
-          sendJson(res, 405, { error: "Method not allowed" });
+          sendJson(req, res, 405, { error: "Method not allowed" });
           return;
         }
         await handleLegacySseConnection(req, res);
@@ -238,18 +239,25 @@ const httpServer = createServer((req, res) => {
 
       if (httpConfig.enableLegacySse && requestUrl.pathname === legacyMessageEndpoint) {
         if (req.method !== "POST") {
-          sendJson(res, 405, { error: "Method not allowed" });
+          sendJson(req, res, 405, { error: "Method not allowed" });
           return;
         }
         await handleLegacyMessage(req, res);
         return;
       }
 
-      sendJson(res, 404, { error: "Not found" });
+      sendJson(req, res, 404, { error: "Not found" });
     } catch (error) {
-      logger.error("HTTP MCP request failed", { error });
+      logger.error("HTTP MCP request failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       if (!res.headersSent) {
-        sendJson(res, 500, { error: "Internal server error" });
+        const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
+        const message =
+          error instanceof RequestBodyTooLargeError
+            ? "Request body is too large"
+            : "Internal server error";
+        sendJson(req, res, statusCode, { error: message });
       }
     }
   })();

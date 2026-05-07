@@ -23,6 +23,10 @@ env:
   DOPPLER_CONFIG: main
   HAS_DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN != '' }}
 
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   codeql:
     name: CodeQL
@@ -54,7 +58,23 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+      - name: Check Dependency Graph availability
+        id: dependency_graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}" --silent >/dev/null 2>&1; then
+            available=true
+          else
+            available=false
+            echo "Dependency Graph is not available for this repository yet; skipping dependency review."
+          fi
+          echo "available=${available}" >> "$GITHUB_OUTPUT"
       - uses: actions/dependency-review-action@v4
+        if: steps.dependency_graph.outputs.available == 'true'
         with:
           fail-on-severity: moderate
 
@@ -189,7 +209,7 @@ jobs:
       - name: Install zizmor
         run: python3 -m pip install --user zizmor
       - name: Lint workflows
-        run: '"$HOME/.local/bin/zizmor" .github/workflows'
+        run: '"$HOME/.local/bin/zizmor" --offline --min-severity low .github/workflows'
 
   osv:
     name: OSV Scanner

@@ -24,9 +24,9 @@ Bu komut, ChatGPT Desktop yapılandırma dosyasını otomatik olarak günceller.
 ```json
 {
   "mcpServers": {
-    "ssh-mcp-server": {
-      "name": "ssh-mcp-server",
-      "description": "SSH client server for remote automation",
+    "ssh-mcp": {
+      "name": "io.github.oaslananka/mcp-ssh-tool",
+      "description": "Secure SSH MCP automation server",
       "command": "npx",
       "args": ["-y", "mcp-ssh-tool"]
     }
@@ -93,9 +93,10 @@ Tam liste için: `ssh_ping`, `fs_stat`, `fs_mkdirp`, `fs_rmrf`, `os_detect`, `en
 
 ## Güvenlik Notları
 
-- SSH anahtarlarınız `~/.ssh/` klasöründen otomatik olarak algılanır
-- Şifreler ChatGPT konuşma geçmişinde saklanmaz
-- Oturumlar 15 dakika sonra otomatik olarak kapanır
+- SSH anahtarlarınızı, parolalarınızı ve bearer token değerlerinizi sohbete yazmayın.
+- Varsayılan host-key politikası strict moddur; `known_hosts` dosyanızı hazırlayın.
+- Mutasyon ve yıkıcı işlemler politika tarafından kontrol edilir.
+- Oturumlar 15 dakika sonra otomatik olarak kapanır.
 
 ---
 

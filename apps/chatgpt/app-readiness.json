@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "publishReady": false,
+  "canonicalRepository": "https://github.com/oaslananka-lab/mcp-ssh-tool",
+  "showcaseMirror": "https://github.com/oaslananka/mcp-ssh-tool",
+  "supportUrl": "https://github.com/oaslananka-lab/mcp-ssh-tool/issues",
+  "securityUrl": "https://github.com/oaslananka-lab/mcp-ssh-tool/security/advisories/new",
+  "privacyUrl": "https://github.com/oaslananka-lab/mcp-ssh-tool/blob/main/SECURITY.md",
+  "termsUrl": "https://github.com/oaslananka-lab/mcp-ssh-tool/blob/main/LICENSE",
+  "mcp": {
+    "serverName": "io.github.oaslananka/mcp-ssh-tool",
+    "packageName": "mcp-ssh-tool",
+    "version": "2.1.1",
+    "localCommand": "mcp-ssh-tool",
+    "localResourcePath": "/mcp",
+    "transports": ["stdio", "streamable-http"],
+    "legacySse": "compatibility-only"
+  },
+  "app": {
+    "name": "SSH MCP Tool",
+    "description": "Secure SSH inspection and policy-controlled automation through MCP.",
+    "categories": ["Developer Tools", "Productivity"],
+    "icon": "apps/chatgpt/icon.svg",
+    "defaultProfile": "read-only-inspection"
+  },
+  "security": {
+    "readOnlyDefaultProfile": true,
+    "hostAllowlistRequired": true,
+    "strictHostKeyVerificationDefault": true,
+    "credentialEntryInChat": false,
+    "privateKeysInChat": false,
+    "rawCommandExecutionDefault": false,
+    "destructiveToolsRequirePolicyAllow": true,
+    "destructiveToolsRequireExplicitConfirmation": true,
+    "nonLoopbackHttpRequiresBearerAndOrigins": true,
+    "auditLogsEnabled": true,
+    "redactionRequired": true
+  },
+  "submission": {
+    "dashboardConfigured": false,
+    "publicHttpsMcpEndpoint": null,
+    "domainVerificationConfigured": false,
+    "componentCspConfigured": false,
+    "privacyPolicyReviewed": false,
+    "screenshotsPrepared": false,
+    "reviewTestCasesPrepared": false
+  },
+  "toolProfiles": [
+    {
+      "name": "read-only-inspection",
+      "enabledByDefault": true,
+      "tools": [
+        "ssh_list_configured_hosts",
+        "ssh_list_sessions",
+        "os_detect",
+        "fs_stat",
+        "fs_read",
+        "proc_exec_stream",
+        "get_metrics"
+      ],
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": true
+      }
+    },
+    {
+      "name": "policy-controlled-mutations",
+      "enabledByDefault": false,
+      "policyRequired": true,
+      "explicitConfirmationRequired": true,
+      "tools": [
+        "proc_exec",
+        "proc_sudo",
+        "fs_write",
+        "fs_rmrf",
+        "file_upload",
+        "file_download",
+        "ensure_package",
+        "ensure_service",
+        "tunnel_open_local",
+        "tunnel_open_remote"
+      ],
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "openWorldHint": true
+      }
+    }
+  ]
+}

@@ -10,6 +10,8 @@ Protect `main` in `oaslananka-lab/mcp-ssh-tool` with the org workflows as requir
 - `CI / Unit Tests (Node 24.14.1)`
 - `CI / SSH Integration`
 - `CI / Build, SBOM, and Pack`
+- `CI / Docker Smoke`
+- `Docker / Build and smoke image`
 - `Security / CodeQL`
 - `Security / OpenSSF Scorecard`
 - `Security / Gitleaks`
@@ -27,6 +29,6 @@ Enable merge queue if it is used by the repository. Required-check workflows inc
 - Restrict who can approve the `npm-production` environment.
 - Do not allow bypass for the final publish workflow except repository administrators.
 
-## Canonical Repository
+## Showcase Mirror
 
-After the org sync workflow is verified, disable GitHub Actions in `oaslananka/mcp-ssh-tool` with the documented `gh api` command in `docs/ci-cd-topology.md`.
+The personal repository `oaslananka/mcp-ssh-tool` is a showcase mirror. It is updated from the org repository by `mirror-personal.yml`; do not require personal-repo Actions as branch protection or release gates.

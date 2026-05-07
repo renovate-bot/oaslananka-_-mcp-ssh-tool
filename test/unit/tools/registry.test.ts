@@ -1,5 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { createTestContainer } from "../../../src/container.js";
+import { createToolRegistry } from "../../../src/tools/index.js";
 import { ToolRegistry } from "../../../src/tools/registry.js";
 import type { ToolProvider } from "../../../src/tools/types.js";
 
@@ -66,10 +68,40 @@ describe("ToolRegistry", () => {
     });
 
     await expect(registry.dispatch("broken_tool", {})).resolves.toEqual(
-      expect.objectContaining({ isError: true }),
+      expect.objectContaining({
+        isError: true,
+        structuredContent: expect.objectContaining({ error: true, message: "boom" }),
+      }),
     );
     await expect(registry.dispatch("missing_tool", {})).resolves.toEqual(
-      expect.objectContaining({ isError: true }),
+      expect.objectContaining({
+        isError: true,
+        structuredContent: expect.objectContaining({
+          error: true,
+          message: "Unknown tool: missing_tool",
+        }),
+      }),
     );
+  });
+
+  test("all production tools expose required MCP annotations", async () => {
+    const container = createTestContainer();
+    const registry = createToolRegistry(container);
+
+    for (const tool of registry.getAllTools()) {
+      expect(tool.annotations).toEqual(
+        expect.objectContaining({
+          readOnlyHint: expect.any(Boolean),
+          destructiveHint: expect.any(Boolean),
+          idempotentHint: expect.any(Boolean),
+          openWorldHint: expect.any(Boolean),
+        }),
+      );
+      expect(tool.title ?? tool.annotations?.title).toEqual(expect.any(String));
+      expect(tool.outputSchema).toEqual(expect.objectContaining({ type: "object" }));
+    }
+
+    container.rateLimiter.destroy();
+    await container.sessionManager.destroy();
   });
 });

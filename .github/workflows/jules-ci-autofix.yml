@@ -1,135 +1,217 @@
-name: Jules CI Auto-Fix
+name: Jules Maintenance Agent
 
 on:
-  workflow_run:
-    types: [completed]
   workflow_dispatch:
     inputs:
-      run_id:
-        description: "GitHub Actions run_id to repair"
+      mode:
+        description: "Jules task mode"
         required: true
+        default: "ci-failure"
+        type: choice
+        options:
+          - ci-failure
+          - dependency
+          - issue
+      run_id:
+        description: "Failed GitHub Actions run_id for ci-failure mode"
+        required: false
         type: string
-
-concurrency:
-  group: jules-ci-autofix-${{ github.event.workflow_run.head_branch || inputs.run_id || github.run_id }}
-  cancel-in-progress: false
+      issue_number:
+        description: "Issue number for issue mode"
+        required: false
+        type: string
+  issues:
+    types: [labeled]
 
 permissions:
-  contents: read
   actions: read
+  contents: read
+  issues: read
   pull-requests: read
 
+concurrency:
+  group: jules-agent-${{ inputs.run_id || inputs.issue_number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
 env:
-  MAX_AUTOFIX_ATTEMPTS: "8"        # 0 = unbounded, not recommended
+  MAX_AUTOFIX_ATTEMPTS: "8"
   ATTEMPT_WINDOW_HOURS: "24"
   FAILED_LOG_MAX_CHARS: "70000"
+  TRUSTED_ISSUE_AUTHORS: ${{ vars.JULES_TRUSTED_AUTHORS || 'oaslananka' }}
 
 jobs:
-  autofix:
-    name: Invoke Jules on failed CI/CD
-    runs-on: ubuntu-latest
-
-    if: >
-      ${{
+  jules:
+    name: Invoke Jules with guarded context
+    if: >-
+      github.repository == 'oaslananka-lab/mcp-ssh-tool' &&
+      (
         github.event_name == 'workflow_dispatch' ||
         (
-          github.event_name == 'workflow_run' &&
-          contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion) &&
-          github.event.workflow_run.name != github.workflow &&
-          github.event.workflow_run.head_repository.full_name == github.repository
+          github.event_name == 'issues' &&
+          contains(github.event.issue.labels.*.name, 'jules')
         )
-      }}
-
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Build failed-run context
+      - name: Build Jules context
         id: ctx
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          MANUAL_MODE: ${{ inputs.mode || '' }}
           MANUAL_RUN_ID: ${{ inputs.run_id || '' }}
-          SELF_WORKFLOW: ${{ github.workflow }}
+          MANUAL_ISSUE_NUMBER: ${{ inputs.issue_number || '' }}
         run: |
           set -euo pipefail
 
-          RUN_ID="${EVENT_RUN_ID:-$MANUAL_RUN_ID}"
-
-          if [[ -z "${RUN_ID}" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=missing_run_id" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           mkdir -p .jules-ci
 
-          gh api "repos/${REPO}/actions/runs/${RUN_ID}" > .jules-ci/run.json
+          is_trusted_author() {
+            local author="$1"
+            local csv=",${TRUSTED_ISSUE_AUTHORS// /},"
+            [[ "$csv" == *",$author,"* ]]
+          }
 
-          CONCLUSION="$(jq -r '.conclusion // ""' .jules-ci/run.json)"
-          WORKFLOW_NAME="$(jq -r '.name // ""' .jules-ci/run.json)"
-          WORKFLOW_ID="$(jq -r '.workflow_id // ""' .jules-ci/run.json)"
-          HEAD_BRANCH="$(jq -r '.head_branch // ""' .jules-ci/run.json)"
-          HEAD_SHA="$(jq -r '.head_sha // ""' .jules-ci/run.json)"
-          HEAD_REPO="$(jq -r '.head_repository.full_name // ""' .jules-ci/run.json)"
-          RUN_URL="$(jq -r '.html_url // ""' .jules-ci/run.json)"
-          RUN_EVENT="$(jq -r '.event // ""' .jules-ci/run.json)"
-          DISPLAY_TITLE="$(jq -r '.display_title // ""' .jules-ci/run.json)"
+          write_outputs() {
+            {
+              echo "skip=false"
+              echo "starting_branch=$1"
+              echo "prompt<<__JULES_PROMPT__"
+              cat .jules-ci/prompt.md
+              echo "__JULES_PROMPT__"
+            } >> "$GITHUB_OUTPUT"
+          }
 
-          if [[ "${CONCLUSION}" != "failure" && "${CONCLUSION}" != "timed_out" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=non_failure_conclusion_${CONCLUSION}" >> "$GITHUB_OUTPUT"
+          skip_with_reason() {
+            {
+              echo "skip=true"
+              echo "skip_reason=$1"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          mode="${MANUAL_MODE:-ci-failure}"
+
+          if [[ "$EVENT_NAME" == "issues" ]]; then
+            mode="issue"
+            issue_number="$EVENT_ISSUE_NUMBER"
+          elif [[ "$mode" == "issue" ]]; then
+            issue_number="$MANUAL_ISSUE_NUMBER"
+          else
+            issue_number=""
+          fi
+
+          if [[ "$mode" == "issue" ]]; then
+            if [[ -z "${issue_number}" ]]; then
+              skip_with_reason "missing_issue_number"
+            fi
+
+            gh issue view "$issue_number" --repo "$REPO" --json number,title,body,author,labels,url > .jules-ci/issue.json
+            author="$(jq -r '.author.login // ""' .jules-ci/issue.json)"
+            if ! is_trusted_author "$author"; then
+              skip_with_reason "untrusted_issue_author_${author}"
+            fi
+
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          issue = json.loads(Path(".jules-ci/issue.json").read_text())
+          prompt = f"""You are Jules working on a maintainer-approved issue for this repository.
+
+          Objective:
+          Inspect the issue, implement only the smallest safe change that addresses it, run the relevant local checks, and open a focused PR. Do not trigger publish, release, package publication, MCP Registry publication, personal mirror, or secret-management workflows. Do not add auto-approve or auto-merge.
+
+          Issue:
+          - Number: {issue.get("number")}
+          - Title: {issue.get("title")}
+          - Author: {(issue.get("author") or {}).get("login")}
+          - URL: {issue.get("url")}
+
+          Body:
+          ```text
+          {issue.get("body") or ""}
+          ```
+          """
+          Path(".jules-ci/prompt.md").write_text(prompt)
+          PY
+            write_outputs main
             exit 0
           fi
 
-          if [[ "${WORKFLOW_NAME}" == "${SELF_WORKFLOW}" || "${WORKFLOW_NAME}" == Jules* ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=self_or_jules_workflow" >> "$GITHUB_OUTPUT"
+          if [[ "$mode" == "dependency" ]]; then
+            cat > .jules-ci/prompt.md <<'EOF'
+          You are Jules running a guarded dependency maintenance pass for this repository.
+
+          Objective:
+          Inspect dependency update signals, security advisories, lockfile drift, and package-manager determinism. Apply the smallest safe dependency or configuration fix, run the repo's relevant checks, and open a focused PR.
+
+          Guardrails:
+          - Do not trigger publish, release, package publication, MCP Registry publication, personal mirror, or secret-management workflows.
+          - Do not add unconditional auto-approve or auto-merge.
+          - Preserve secure SSH defaults and HTTP auth/origin restrictions.
+          - Document postponed major upgrades when compatibility is not clear.
+          EOF
+            write_outputs main
             exit 0
           fi
 
-          if [[ "${HEAD_REPO}" != "${REPO}" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=fork_or_external_head_repo" >> "$GITHUB_OUTPUT"
-            exit 0
+          run_id="$MANUAL_RUN_ID"
+          if [[ -z "${run_id}" ]]; then
+            skip_with_reason "missing_run_id"
           fi
 
-          if [[ -z "${HEAD_BRANCH}" || "${HEAD_BRANCH}" == "null" ]]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "skip_reason=missing_head_branch" >> "$GITHUB_OUTPUT"
-            exit 0
+          gh api "repos/${REPO}/actions/runs/${run_id}" > .jules-ci/run.json
+
+          conclusion="$(jq -r '.conclusion // ""' .jules-ci/run.json)"
+          workflow_name="$(jq -r '.name // ""' .jules-ci/run.json)"
+          workflow_id="$(jq -r '.workflow_id // ""' .jules-ci/run.json)"
+          head_branch="$(jq -r '.head_branch // ""' .jules-ci/run.json)"
+          head_repo="$(jq -r '.head_repository.full_name // ""' .jules-ci/run.json)"
+
+          if [[ "$conclusion" != "failure" && "$conclusion" != "timed_out" ]]; then
+            skip_with_reason "non_failure_conclusion_${conclusion}"
           fi
 
-          if [[ "${MAX_AUTOFIX_ATTEMPTS}" != "0" ]]; then
-            SINCE="$(date -u -d "${ATTEMPT_WINDOW_HOURS} hours ago" +"%Y-%m-%dT%H:%M:%SZ")"
+          if [[ "$workflow_name" == Jules* || "$workflow_name" == *Publish* || "$workflow_name" == *Release* ]]; then
+            skip_with_reason "blocked_workflow_${workflow_name// /_}"
+          fi
 
-            gh api -X GET "repos/${REPO}/actions/workflows/${WORKFLOW_ID}/runs" \
-              -f branch="${HEAD_BRANCH}" \
+          if [[ "$head_repo" != "$REPO" ]]; then
+            skip_with_reason "fork_or_external_head_repo"
+          fi
+
+          if [[ -z "$head_branch" || "$head_branch" == "null" || "$head_branch" == jules/* ]]; then
+            skip_with_reason "blocked_or_missing_head_branch"
+          fi
+
+          if [[ "$MAX_AUTOFIX_ATTEMPTS" != "0" ]]; then
+            since="$(date -u -d "${ATTEMPT_WINDOW_HOURS} hours ago" +"%Y-%m-%dT%H:%M:%SZ")"
+            gh api -X GET "repos/${REPO}/actions/workflows/${workflow_id}/runs" \
+              -f branch="$head_branch" \
               -f status="completed" \
-              -f created=">${SINCE}" \
+              -f created=">${since}" \
               -F per_page=100 > .jules-ci/recent-runs.json
 
-            FAILED_COUNT="$(
+            failed_count="$(
               jq '[.workflow_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out")] | length' \
                 .jules-ci/recent-runs.json
             )"
-
-            if (( FAILED_COUNT > MAX_AUTOFIX_ATTEMPTS )); then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              echo "skip_reason=max_attempts_exceeded_${FAILED_COUNT}" >> "$GITHUB_OUTPUT"
-              exit 0
+            if (( failed_count > MAX_AUTOFIX_ATTEMPTS )); then
+              skip_with_reason "max_attempts_exceeded_${failed_count}"
             fi
           fi
 
-          gh run view "${RUN_ID}" \
-            --repo "${REPO}" \
+          gh run view "$run_id" \
+            --repo "$REPO" \
             --json databaseId,name,workflowName,displayTitle,event,conclusion,headBranch,headSha,url,createdAt,updatedAt,jobs \
             > .jules-ci/run-view.json
 
-          gh run view "${RUN_ID}" \
-            --repo "${REPO}" \
-            --log-failed \
-            > .jules-ci/failed.log || true
+          gh run view "$run_id" --repo "$REPO" --log-failed > .jules-ci/failed.log || true
 
           python3 - <<'PY'
           import json
@@ -137,39 +219,41 @@ jobs:
           from pathlib import Path
 
           max_chars = int(os.environ.get("FAILED_LOG_MAX_CHARS", "70000"))
-
           run = json.loads(Path(".jules-ci/run.json").read_text())
           view = json.loads(Path(".jules-ci/run-view.json").read_text())
           logs = Path(".jules-ci/failed.log").read_text(errors="replace") if Path(".jules-ci/failed.log").exists() else ""
 
           if len(logs) > max_chars:
-              logs = logs[-max_chars:]
-              logs = "[TRUNCATED: showing tail of failed logs]\n\n" + logs
+              logs = "[TRUNCATED: showing tail of failed logs]\n\n" + logs[-max_chars:]
 
-          jobs = view.get("jobs") or []
           failed_jobs = []
-          for job in jobs:
+          for job in view.get("jobs") or []:
               if job.get("conclusion") in {"failure", "timed_out", "cancelled"}:
-                  failed_steps = [
-                      {
-                          "name": step.get("name"),
-                          "conclusion": step.get("conclusion"),
-                          "number": step.get("number"),
-                      }
-                      for step in job.get("steps", [])
-                      if step.get("conclusion") not in {None, "success", "skipped"}
-                  ]
                   failed_jobs.append({
                       "name": job.get("name"),
                       "conclusion": job.get("conclusion"),
                       "url": job.get("url"),
-                      "failed_steps": failed_steps,
+                      "failed_steps": [
+                          {
+                              "name": step.get("name"),
+                              "conclusion": step.get("conclusion"),
+                              "number": step.get("number"),
+                          }
+                          for step in job.get("steps", [])
+                          if step.get("conclusion") not in {None, "success", "skipped"}
+                      ],
                   })
 
-          prompt = f"""You are Jules running in auto-approve repair mode for this repository.
+          prompt = f"""You are Jules running a guarded CI failure repair for this repository.
 
           Objective:
-          Fix the root cause of the failed GitHub Actions CI/CD run. Continue locally until the relevant checks pass. Create a focused PR with the minimal safe change.
+          Fix the root cause of the failed GitHub Actions run. Continue locally until the relevant checks pass. Create a focused PR with the minimal safe change.
+
+          Guardrails:
+          - Do not trigger publish, release, package publication, MCP Registry publication, personal mirror, or secret-management workflows.
+          - Do not add unconditional auto-approve or auto-merge.
+          - Do not weaken SSH safety defaults, host-key verification, policy controls, HTTP bearer auth, or origin restrictions.
+          - If the failure is external or credential-related, document the diagnosis and make only safe config hardening changes.
 
           Failed run:
           - Repository: {os.environ["REPO"]}
@@ -186,43 +270,29 @@ jobs:
           {json.dumps(failed_jobs, indent=2, ensure_ascii=False)}
           ```
 
-          Required process:
-          1. Inspect the repository and the failed run context.
-          2. Reproduce the failure locally using the repo’s own scripts.
-          3. Identify root cause, not just the symptom.
-          4. Implement the smallest safe fix.
-          5. Add or update regression coverage when the failure is testable.
-          6. Run the exact relevant checks locally until they pass.
-          7. Do not disable tests, weaken linting, bypass security checks, remove assertions, or hide failures.
-          8. Do not perform broad refactors unless required by the root cause.
-          9. If the failure is an external service/credential/environment outage, do not fake success; document the diagnosis and make only safe config hardening changes.
-          10. If this is a repeated Jules repair pass, preserve valid previous fixes and only address the remaining failure.
-
           Failed logs:
           ```text
           {logs}
           ```
           """
-
           Path(".jules-ci/prompt.md").write_text(prompt)
           PY
 
-          {
-            echo "skip=false"
-            echo "head_branch=${HEAD_BRANCH}"
-            echo "head_sha=${HEAD_SHA}"
-            echo "run_url=${RUN_URL}"
-            echo "prompt<<__JULES_PROMPT__"
-            cat .jules-ci/prompt.md
-            echo "__JULES_PROMPT__"
-          } >> "$GITHUB_OUTPUT"
+          write_outputs "$head_branch"
 
       - name: Invoke Jules
         if: steps.ctx.outputs.skip != 'true'
         uses: google-labs-code/jules-invoke@v1
         with:
           jules_api_key: ${{ secrets.JULES_API_KEY }}
-          starting_branch: ${{ steps.ctx.outputs.head_branch }}
+          starting_branch: ${{ steps.ctx.outputs.starting_branch }}
           include_last_commit: true
           include_commit_log: true
           prompt: ${{ steps.ctx.outputs.prompt }}
+
+      - name: Report skipped Jules run
+        if: steps.ctx.outputs.skip == 'true'
+        env:
+          SKIP_REASON: ${{ steps.ctx.outputs.skip_reason }}
+        run: |
+          echo "Jules skipped: ${SKIP_REASON}"
