@@ -64,17 +64,22 @@ jobs:
           persist-credentials: false
 
       - name: Configure mirror remote
+        id: mirror-token
         env:
           PERSONAL_REPO_PUSH_TOKEN: ${{ secrets.PERSONAL_REPO_PUSH_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${PERSONAL_REPO_PUSH_TOKEN:-}" ]; then
-            echo "PERSONAL_REPO_PUSH_TOKEN is required for personal showcase mirroring."
-            exit 1
+            echo "PERSONAL_REPO_PUSH_TOKEN is not configured; skipping personal showcase mirror."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "::add-mask::${PERSONAL_REPO_PUSH_TOKEN}"
           git remote add personal "https://x-access-token:${PERSONAL_REPO_PUSH_TOKEN}@github.com/oaslananka/mcp-ssh-tool.git"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Preflight and mirror safe refs
+        if: steps.mirror-token.outputs.enabled == 'true'
         env:
           APPROVAL: ${{ inputs.approval || '' }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
