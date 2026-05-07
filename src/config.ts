@@ -43,6 +43,7 @@ export interface ServerConfig {
     allowedOrigins: string[];
     bearerTokenFile?: string;
     enableLegacySse: boolean;
+    maxRequestBodyBytes: number;
   };
 }
 
@@ -83,6 +84,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
     port: 3000,
     allowedOrigins: ["http://127.0.0.1", "http://localhost"],
     enableLegacySse: false,
+    maxRequestBodyBytes: 1024 * 1024,
   },
 };
 
@@ -258,6 +260,10 @@ export class ConfigManager {
       enableLegacySse: parseBoolean(
         process.env.SSH_MCP_ENABLE_LEGACY_SSE,
         config.http.enableLegacySse,
+      ),
+      maxRequestBodyBytes: parseInteger(
+        process.env.SSH_MCP_HTTP_MAX_REQUEST_BODY_BYTES,
+        config.http.maxRequestBodyBytes,
       ),
     };
 
