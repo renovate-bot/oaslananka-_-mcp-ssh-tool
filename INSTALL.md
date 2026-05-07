@@ -266,7 +266,7 @@ LOG_LEVEL=debug mcp-ssh-tool
 
 ```bash
 # Clone repository
-git clone https://github.com/oaslananka/mcp-ssh-tool.git
+git clone https://github.com/oaslananka-lab/mcp-ssh-tool.git
 cd mcp-ssh-tool
 
 # Install dependencies
@@ -300,8 +300,8 @@ RUN_SSH_E2E=1 npm run test:e2e
 ## Support
 
 ### Getting Help
-- GitHub Issues: https://github.com/oaslananka/mcp-ssh-tool/issues
-- Documentation: https://github.com/oaslananka/mcp-ssh-tool#readme
+- GitHub Issues: https://github.com/oaslananka-lab/mcp-ssh-tool/issues
+- Documentation: https://github.com/oaslananka-lab/mcp-ssh-tool#readme
 
 ### Contributing
 - Fork the repository

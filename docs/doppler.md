@@ -1,6 +1,6 @@
 # Doppler Secrets
 
-GitHub Actions stores only the bootstrap `DOPPLER_TOKEN`. All other workflow secrets live in Doppler and are injected at runtime with `doppler run`.
+GitHub Actions stores the bootstrap `DOPPLER_TOKEN` directly. `PERSONAL_REPO_PUSH_TOKEN` and `JULES_API_KEY` are GitHub secrets for their dedicated workflows. npm fallback, Codecov, MCP Registry publisher identity, and Safety runtime values live in Doppler and are injected at runtime with `doppler run`.
 
 ## Inventory
 
@@ -33,7 +33,7 @@ For local development, `task doppler:check` validates the tracked inventory with
 
 - CI uploads Codecov coverage through `doppler run` so `CODECOV_TOKEN` never becomes a GitHub secret.
 - Emergency npm publish uses `NPM_TOKEN` from Doppler only.
-- Release-back mirroring uses `DOPPLER_GITHUB_SERVICE_TOKEN` from Doppler only.
+- MCP Registry publication for the already-published `io.github.oaslananka/mcp-ssh-tool` namespace uses `DOPPLER_GITHUB_SERVICE_TOKEN` from Doppler only.
 - Safety integration validates `SAFETY_API_KEY` injection through Doppler.
 
-Do not add these values directly to GitHub repository or environment secrets.
+Do not add Doppler-managed values directly to GitHub repository or environment secrets.
