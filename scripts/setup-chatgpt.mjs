@@ -18,12 +18,14 @@ const CONFIG_PATHS = {
 };
 
 const MCP_CONFIG = {
-  name: "ssh-mcp-server",
-  description: "SSH client server for remote automation",
+  name: "io.github.oaslananka/mcp-ssh-tool",
+  description: "Secure SSH MCP automation server",
   command: "npx",
   args: ["-y", "mcp-ssh-tool"],
   env: {},
 };
+
+const MCP_SERVER_KEY = "ssh-mcp";
 
 function getConfigPath() {
   const platform = process.platform;
@@ -67,10 +69,10 @@ function main() {
   const config = loadExistingConfig(configPath);
 
   // Check if already configured
-  if (config.mcpServers && config.mcpServers["ssh-mcp-server"]) {
+  if (config.mcpServers && config.mcpServers[MCP_SERVER_KEY]) {
     console.log("✅ MCP SSH Tool is already configured!");
     console.log("\nCurrent configuration:");
-    console.log(JSON.stringify(config.mcpServers["ssh-mcp-server"], null, 2));
+    console.log(JSON.stringify(config.mcpServers[MCP_SERVER_KEY], null, 2));
 
     const rl = readline.createInterface({
       input: process.stdin,
@@ -97,7 +99,7 @@ function addOrUpdateConfig(config, configPath) {
   }
 
   // Add/update SSH MCP server
-  config.mcpServers["ssh-mcp-server"] = MCP_CONFIG;
+  config.mcpServers[MCP_SERVER_KEY] = MCP_CONFIG;
 
   // Write config
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
