@@ -35,6 +35,7 @@ Releases use release-please manifest mode:
 - Conventional Commit history determines the next version.
 - The release workflow runs on merges to `main`.
 - Release asset and publish jobs run only when release-please reports `release_created == 'true'`.
+- npm publish and npm package verification run only when repository variable `AUTO_RELEASE_PUBLISH` is set to `true`; otherwise, the release workflow still creates the GitHub Release assets, checksums, SBOM, and attestations and records an explicit publish skip.
 
 Do not create tags manually, edit `CHANGELOG.md` by hand, or bump package versions outside a release-please PR.
 
@@ -44,7 +45,7 @@ Do not create tags manually, edit `CHANGELOG.md` by hand, or bump package versio
 2. Let `release.yml` open or update the release-please PR.
 3. Review the generated changelog and version updates.
 4. Merge the release-please PR after CI is green.
-5. Let `release.yml` create the GitHub Release, package tarball, CycloneDX SBOM, SHA256 checksum files, artifact attestations, and npm trusted publish.
+5. Let `release.yml` create the GitHub Release, package tarball, CycloneDX SBOM, SHA256 checksum files, and artifact attestations; npm trusted publish and verification occur only when `AUTO_RELEASE_PUBLISH=true`.
 
 The MCP server name remains `io.github.oaslananka/mcp-ssh-tool` because the server is already published under that name in the MCP Registry.
 
