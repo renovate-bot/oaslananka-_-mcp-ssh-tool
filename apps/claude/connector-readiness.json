@@ -10,15 +10,20 @@
   "mcp": {
     "serverName": "io.github.oaslananka/mcp-ssh-tool",
     "packageName": "mcp-ssh-tool",
-    "version": "2.2.0",
+    "version": "2.2.1",
     "endpointPath": "/mcp",
-    "transports": ["streamable-http"],
+    "transports": [
+      "streamable-http"
+    ],
     "legacySse": "compatibility-only"
   },
   "connector": {
     "name": "SSH MCP Tool",
     "runtimeProfile": "claude",
-    "credentialProviders": ["agent", "command"],
+    "credentialProviders": [
+      "agent",
+      "command"
+    ],
     "credentialEntryInChat": false,
     "productionAuth": "oauth-jwks",
     "developmentAuth": "bearer"

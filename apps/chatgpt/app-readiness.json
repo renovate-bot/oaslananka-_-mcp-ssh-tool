@@ -10,23 +10,32 @@
   "mcp": {
     "serverName": "io.github.oaslananka/mcp-ssh-tool",
     "packageName": "mcp-ssh-tool",
-    "version": "2.2.0",
+    "version": "2.2.1",
     "localCommand": "mcp-ssh-tool",
     "localResourcePath": "/mcp",
-    "transports": ["stdio", "streamable-http"],
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ],
     "legacySse": "compatibility-only",
     "recommendedProductionTransport": "streamable-http"
   },
   "app": {
     "name": "SSH MCP Tool",
     "description": "Secure SSH inspection and policy-controlled planning through MCP.",
-    "categories": ["Developer Tools", "Productivity"],
+    "categories": [
+      "Developer Tools",
+      "Productivity"
+    ],
     "icon": "apps/chatgpt/icon.svg",
     "defaultProfile": "chatgpt"
   },
   "connector": {
     "runtimeProfile": "chatgpt",
-    "credentialProviders": ["agent", "command"],
+    "credentialProviders": [
+      "agent",
+      "command"
+    ],
     "credentialEntryInChat": false,
     "protectedResourceMetadata": "/.well-known/oauth-protected-resource",
     "productionAuth": "oauth-jwks",
