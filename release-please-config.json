@@ -32,6 +32,16 @@
           "jsonpath": "$.version"
         },
         {
+          "type": "json",
+          "path": "apps/chatgpt/app-readiness.json",
+          "jsonpath": "$.mcp.version"
+        },
+        {
+          "type": "json",
+          "path": "apps/claude/connector-readiness.json",
+          "jsonpath": "$.mcp.version"
+        },
+        {
           "type": "generic",
           "path": "src/mcp.ts"
         }
