@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.2...mcp-ssh-tool-v2.2.3) (2026-05-08)
+
+
+### Bug Fixes
+
+* **repo:** align source topology and dependency controls ([90cb917](https://github.com/oaslananka-lab/mcp-ssh-tool/commit/90cb917abe7ee69689adc197e80bf1a5b25fdf14))
+
 ## [2.2.2](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.1...mcp-ssh-tool-v2.2.2) (2026-05-08)
 
 
