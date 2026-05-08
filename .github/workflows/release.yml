@@ -116,6 +116,7 @@ jobs:
           gh release upload "$RELEASE_TAG" artifacts/* --repo "$GITHUB_REPOSITORY"
 
       - name: Publish to npm with trusted publishing
+        if: ${{ vars.AUTO_RELEASE_PUBLISH == 'true' }}
         env:
           PACKAGE_FILE: ${{ steps.pack.outputs.package_file }}
         run: |
@@ -124,8 +125,15 @@ jobs:
           pnpm publish "./artifacts/${PACKAGE_FILE}" --access public --provenance --no-git-checks
 
       - name: Verify npm package
+        if: ${{ vars.AUTO_RELEASE_PUBLISH == 'true' }}
         env:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           set -euo pipefail
           pnpm view "mcp-ssh-tool@${VERSION}" version --silent
+
+      - name: Record npm publish skip
+        if: ${{ vars.AUTO_RELEASE_PUBLISH != 'true' }}
+        run: |
+          set -euo pipefail
+          echo "npm publishing is disabled by AUTO_RELEASE_PUBLISH."
