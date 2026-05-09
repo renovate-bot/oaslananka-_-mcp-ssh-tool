@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.4...mcp-ssh-tool-v2.2.5) (2026-05-09)
+
+
+### Bug Fixes
+
+* **render:** harden remote HTTP bootstrap ([2fc7709](https://github.com/oaslananka-lab/mcp-ssh-tool/commit/2fc7709d0c0f73ad9af160d34ffcbe230aadef94))
+
 ## [2.2.4](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.3...mcp-ssh-tool-v2.2.4) (2026-05-08)
 
 
