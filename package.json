@@ -4,7 +4,7 @@
   "mcpName": "io.github.oaslananka/mcp-ssh-tool",
   "description": "Model Context Protocol (MCP) SSH client server for remote automation",
   "type": "module",
-  "packageManager": "pnpm@11.0.8",
+  "packageManager": "pnpm@11.0.9",
   "main": "dist/index.js",
   "exports": "./dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,6 +42,7 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.{mjs,cjs}\" \".github/workflows/*.{yml,yaml}\" \".azure/pipelines/*.{yml,yaml}\" \".gitlab-ci.yml\"",
     "format:staged": "node scripts/run-staged-checks.mjs",
     "prepare": "node scripts/setup-git-hooks.mjs",
+    "prepack": "pnpm run build && pnpm run sync-version -- --check && pnpm run validate:mcp-metadata && pnpm run validate:chatgpt-app && pnpm run validate:claude-connector",
     "prepublishOnly": "pnpm run check",
     "e2e:docker": "docker compose up -d ssh-server && pnpm run test:e2e",
     "integration:docker": "docker compose up -d ssh-server && pnpm run test:integration",
@@ -92,8 +93,8 @@
     "access": "public"
   },
   "engines": {
-    "node": "^22.22.2 || ^24.14.1",
-    "pnpm": "^11.0.8"
+    "node": "^22.22.2 || ^24.15.0",
+    "pnpm": "^11.0.9"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

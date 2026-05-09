@@ -157,7 +157,7 @@ Once configured, you can use natural language commands with GitHub Copilot:
 ## Prerequisites
 
 ### System Requirements
-- Node.js `22.22.2+` or `24.14.1+`
+- Node.js `22.22.2+` or `24.15.0+`
 - VS Code with GitHub Copilot extension
 - SSH access to target systems
 

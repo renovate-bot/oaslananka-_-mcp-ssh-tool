@@ -18,6 +18,12 @@ export interface PolicyConfig {
   pathDenyPrefixes: string[];
   localPathAllowPrefixes: string[];
   localPathDenyPrefixes: string[];
+  tunnelAllowBindHosts: string[];
+  tunnelDenyBindHosts: string[];
+  tunnelAllowRemoteHosts: string[];
+  tunnelDenyRemoteHosts: string[];
+  tunnelAllowPorts: string[];
+  tunnelDenyPorts: string[];
 }
 
 export type PolicyAction =
@@ -25,6 +31,8 @@ export type PolicyAction =
   | "proc.exec"
   | "proc.sudo"
   | "fs.read"
+  | "fs.stat"
+  | "fs.list"
   | "fs.write"
   | "fs.remove"
   | "fs.mkdir"
@@ -49,6 +57,10 @@ export interface PolicyContext {
   command?: string;
   path?: string;
   secondaryPath?: string;
+  localBindHost?: string;
+  localPort?: number;
+  remoteHost?: string;
+  remotePort?: number;
   mode?: PolicyMode;
   rawSudo?: boolean;
   destructive?: boolean;
@@ -83,6 +95,39 @@ function compile(pattern: string): RegExp | undefined {
 
 function matchesAny(value: string, patterns: string[]): boolean {
   return patterns.some((pattern) => compile(pattern)?.test(value));
+}
+
+function matchesPolicyValue(value: string, policies: string[]): boolean {
+  return policies.some((policy) => policy === value || matchesAny(value, [policy]));
+}
+
+function parsePortRange(policy: string): { start: number; end: number } | undefined {
+  const trimmed = policy.trim();
+  const range = /^(\d{1,5})(?:-(\d{1,5}))?$/u.exec(trimmed);
+  if (!range) {
+    return undefined;
+  }
+
+  const start = Number(range[1]);
+  const end = range[2] === undefined ? start : Number(range[2]);
+  if (
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end > 65535 ||
+    start > end
+  ) {
+    return undefined;
+  }
+
+  return { start, end };
+}
+
+function matchesPortPolicy(port: number, policies: string[]): boolean {
+  return policies.some((policy) => {
+    const range = parsePortRange(policy);
+    return range ? port >= range.start && port <= range.end : false;
+  });
 }
 
 export function isSegmentBoundaryPathMatch(
@@ -191,6 +236,12 @@ export class PolicyEngine {
       pathDenyPrefixes: [...this.config.pathDenyPrefixes],
       localPathAllowPrefixes: [...(this.config.localPathAllowPrefixes ?? [])],
       localPathDenyPrefixes: [...(this.config.localPathDenyPrefixes ?? [])],
+      tunnelAllowBindHosts: [...(this.config.tunnelAllowBindHosts ?? [])],
+      tunnelDenyBindHosts: [...(this.config.tunnelDenyBindHosts ?? [])],
+      tunnelAllowRemoteHosts: [...(this.config.tunnelAllowRemoteHosts ?? [])],
+      tunnelDenyRemoteHosts: [...(this.config.tunnelDenyRemoteHosts ?? [])],
+      tunnelAllowPorts: [...(this.config.tunnelAllowPorts ?? [])],
+      tunnelDenyPorts: [...(this.config.tunnelDenyPorts ?? [])],
     };
   }
 
@@ -208,6 +259,88 @@ export class PolicyEngine {
           reason: `Host ${context.host} is not allowed by policy`,
           hint: "Add the host to allowedHosts or use an SSH config alias that is allowed.",
         });
+      }
+    }
+
+    if (context.action === "tunnel.local" || context.action === "tunnel.remote") {
+      const bindHost = context.localBindHost;
+      if (
+        bindHost &&
+        (this.config.tunnelDenyBindHosts ?? []).length > 0 &&
+        matchesPolicyValue(bindHost, this.config.tunnelDenyBindHosts)
+      ) {
+        return denied({
+          mode,
+          action: context.action,
+          reason: `Tunnel bind host ${bindHost} is denied by policy`,
+          hint: "Choose an allowed bind host or adjust tunnelDenyBindHosts.",
+        });
+      }
+      if (
+        bindHost &&
+        (this.config.tunnelAllowBindHosts ?? []).length > 0 &&
+        !matchesPolicyValue(bindHost, this.config.tunnelAllowBindHosts)
+      ) {
+        return denied({
+          mode,
+          action: context.action,
+          reason: `Tunnel bind host ${bindHost} is outside allowed policy`,
+          hint: "Choose an allowed bind host or adjust tunnelAllowBindHosts.",
+        });
+      }
+
+      const remoteHost = context.remoteHost;
+      if (
+        remoteHost &&
+        (this.config.tunnelDenyRemoteHosts ?? []).length > 0 &&
+        matchesPolicyValue(remoteHost, this.config.tunnelDenyRemoteHosts)
+      ) {
+        return denied({
+          mode,
+          action: context.action,
+          reason: `Tunnel remote host ${remoteHost} is denied by policy`,
+          hint: "Choose an allowed remote host or adjust tunnelDenyRemoteHosts.",
+        });
+      }
+      if (
+        remoteHost &&
+        (this.config.tunnelAllowRemoteHosts ?? []).length > 0 &&
+        !matchesPolicyValue(remoteHost, this.config.tunnelAllowRemoteHosts)
+      ) {
+        return denied({
+          mode,
+          action: context.action,
+          reason: `Tunnel remote host ${remoteHost} is outside allowed policy`,
+          hint: "Choose an allowed remote host or adjust tunnelAllowRemoteHosts.",
+        });
+      }
+
+      const ports = [context.localPort, context.remotePort].filter(
+        (port): port is number => typeof port === "number",
+      );
+      for (const port of ports) {
+        if (
+          (this.config.tunnelDenyPorts ?? []).length > 0 &&
+          matchesPortPolicy(port, this.config.tunnelDenyPorts)
+        ) {
+          return denied({
+            mode,
+            action: context.action,
+            reason: `Tunnel port ${port} is denied by policy`,
+            hint: "Choose a different port or adjust tunnelDenyPorts.",
+          });
+        }
+        if (
+          (this.config.tunnelAllowPorts ?? []).length > 0 &&
+          !matchesPortPolicy(port, this.config.tunnelAllowPorts)
+        ) {
+          return denied({
+            mode,
+            action: context.action,
+            reason: `Tunnel port ${port} is outside allowed policy`,
+            hint: "Choose an allowed port or adjust tunnelAllowPorts.",
+          });
+        }
       }
     }
 

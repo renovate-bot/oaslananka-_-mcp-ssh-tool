@@ -90,8 +90,11 @@ class TunnelManager {
     }
     const decision = this.policy.assertAllowed({
       action: "tunnel.local",
-      path: `${localHost}:${localPort}`,
-      secondaryPath: `${remoteHost}:${remotePort ?? localPort}`,
+      host: remoteHost,
+      localBindHost: localHost,
+      localPort,
+      remoteHost,
+      remotePort: remotePort ?? localPort,
       mode: session.info.policyMode,
     });
     if (decision.mode === "explain") {
@@ -184,8 +187,11 @@ class TunnelManager {
     }
     const decision = this.policy.assertAllowed({
       action: "tunnel.remote",
-      path: `${localHost}:${localPort}`,
-      secondaryPath: `${remoteHost}:${remotePort ?? localPort}`,
+      host: remoteHost,
+      localBindHost: localHost,
+      localPort,
+      remoteHost,
+      remotePort: remotePort ?? localPort,
       mode: session.info.policyMode,
     });
     if (decision.mode === "explain") {

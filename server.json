@@ -57,6 +57,18 @@
           "description": "Path to a bearer token file. Required for non-loopback HTTP bindings.",
           "isRequired": false,
           "isSecret": true
+        },
+        {
+          "name": "SSH_MCP_HTTP_PUBLIC_URL",
+          "description": "Stable HTTPS public /mcp URL. Required for non-loopback HTTP bindings.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "SSH_MCP_HTTP_TRUST_PROXY",
+          "description": "Set to true only behind a trusted reverse proxy that controls forwarded headers.",
+          "isRequired": false,
+          "isSecret": false
         }
       ]
     }

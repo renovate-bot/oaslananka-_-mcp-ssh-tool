@@ -5,6 +5,7 @@ export interface HttpStartupConfig {
   host: string;
   allowedOrigins: string[];
   bearerTokenFile?: string;
+  publicUrl?: string;
 }
 
 export interface HttpStartupSecurityContext {
@@ -16,7 +17,14 @@ export interface HttpStartupSecurityContext {
 }
 
 export function isLoopbackHost(host: string): boolean {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  const normalized = host.toLowerCase().replace(/^\[/u, "").replace(/\]$/u, "");
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "::1" ||
+    normalized === "0:0:0:0:0:0:0:1" ||
+    /^127(?:\.\d{1,3}){3}$/u.test(normalized)
+  );
 }
 
 export function validateHttpStartupConfig(
@@ -43,6 +51,27 @@ export function validateHttpStartupConfig(
   if ((!hasBearerAuth && !hasOAuthAuth) || httpConfig.allowedOrigins.length === 0) {
     throw new Error(
       "Refusing non-loopback HTTP MCP binding without SSH_MCP_HTTP_BEARER_TOKEN_FILE or OAuth config, and SSH_MCP_HTTP_ALLOWED_ORIGINS",
+    );
+  }
+
+  if (!httpConfig.publicUrl) {
+    throw new Error(
+      "Refusing non-loopback HTTP MCP binding without SSH_MCP_HTTP_PUBLIC_URL for stable protected resource metadata",
+    );
+  }
+  try {
+    const publicUrl = new URL(httpConfig.publicUrl);
+    if (publicUrl.protocol !== "https:") {
+      throw new Error("public URL must use HTTPS");
+    }
+    if (isLoopbackHost(publicUrl.hostname)) {
+      throw new Error("public URL must not use a loopback host");
+    }
+  } catch (error) {
+    throw new Error(
+      `Refusing non-loopback HTTP MCP binding with invalid SSH_MCP_HTTP_PUBLIC_URL: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 

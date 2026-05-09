@@ -4,7 +4,7 @@
 - **NPM Package:** mcp-ssh-tool
 - **Command:** `mcp-ssh-tool`
 - **Entrypoint:** `dist/index.js`
-- **Runtime:** node (`22.22.2+` or `24.14.1+`)
+- **Runtime:** node (`22.22.2+` or `24.15.0+`)
 - **Transport:** stdio plus loopback Streamable HTTP metadata in `server.json`
 - **Supported Platforms:** linux, macos, windows
 - **Capabilities:** tools (true), resources (true), prompts (true)

@@ -174,6 +174,7 @@ function configFor(
       credentialProvider: "command",
       credentialCommand: process.execPath,
       credentialCommandArgs: [scriptPath],
+      credentialCommandTimeoutMs: 10_000,
       ...connectorOverrides,
     },
   };

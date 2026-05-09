@@ -113,10 +113,30 @@ assert(
   submission.dashboardConfigured === false,
   "dashboardConfigured must be false until reviewed",
 );
-assert(
-  submission.publicHttpsMcpEndpoint === null,
-  "publicHttpsMcpEndpoint must stay null until a production HTTPS endpoint exists",
-);
+if (submission.publicHttpsMcpEndpoint !== null) {
+  let endpointUrl;
+  try {
+    endpointUrl = new URL(submission.publicHttpsMcpEndpoint);
+  } catch {
+    endpointUrl = undefined;
+  }
+
+  assert(
+    endpointUrl !== undefined && endpointUrl.protocol === "https:",
+    "publicHttpsMcpEndpoint must be null or an HTTPS URL",
+  );
+  const hostname = endpointUrl?.hostname.toLowerCase() ?? "";
+  assert(
+    hostname.length > 0 &&
+      hostname !== "localhost" &&
+      !hostname.endsWith(".localhost") &&
+      hostname !== "127.0.0.1" &&
+      !/^127(?:\.\d{1,3}){3}$/u.test(hostname) &&
+      hostname !== "::1" &&
+      hostname !== "0:0:0:0:0:0:0:1",
+    "publicHttpsMcpEndpoint cannot be loopback",
+  );
+}
 assert(
   submission.domainVerificationConfigured === false,
   "domainVerificationConfigured must be false until live verification is complete",

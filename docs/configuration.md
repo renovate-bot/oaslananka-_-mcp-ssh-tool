@@ -14,6 +14,7 @@ Configuration comes from built-in v2 defaults, `SSH_MCP_POLICY_FILE`, environmen
 | `SSH_MCP_SESSION_TTL` | `900000` | Default session TTL in milliseconds. |
 | `SSH_MCP_COMMAND_TIMEOUT` | `30000` | Default process/stream timeout. |
 | `SSH_MCP_MAX_FILE_SIZE` | `10485760` | Max bytes for `fs_read`. |
+| `SSH_MCP_MAX_FILE_WRITE_BYTES` | `10485760` | Max text payload bytes accepted by `fs_write` before buffering. |
 | `SSH_MCP_MAX_COMMAND_OUTPUT_BYTES` | `1048576` | Max retained stdout/stderr bytes for command and stream tools. |
 | `SSH_MCP_MAX_STREAM_CHUNKS` | `4096` | Max retained stream chunks before truncation metadata is returned. |
 | `SSH_MCP_MAX_TRANSFER_BYTES` | `52428800` | Max bytes for `file_upload` and `file_download`. |
@@ -30,7 +31,7 @@ Configuration comes from built-in v2 defaults, `SSH_MCP_POLICY_FILE`, environmen
 | `KNOWN_HOSTS_PATH` | unset | Compatibility alias for known-hosts path. |
 | `STRICT_HOST_KEY_CHECKING` | unset | Deprecated boolean alias. `true` maps to `strict`; `false` maps to `insecure`. |
 | `SSH_MCP_STRICT_HOST_KEY` | unset | Deprecated boolean alias. |
-| `SSH_DEFAULT_KEY_DIR` | `~/.ssh` | Directory searched for `id_ed25519`, `id_rsa`, and `id_ecdsa`. |
+| `SSH_DEFAULT_KEY_DIR` | `~/.ssh` | Directory searched for `id_ed25519`, `id_ecdsa`, `id_ed25519_sk`, `id_ecdsa_sk`, and `id_rsa`. |
 | `SSH_MCP_ALLOW_ROOT_LOGIN` | `false` | Allows SSH sessions as `root` when explicitly enabled. |
 | `SSH_MCP_ALLOWED_CIPHERS` | unset | Optional comma-separated SSH cipher allow-list. |
 
@@ -52,6 +53,12 @@ Configuration comes from built-in v2 defaults, `SSH_MCP_POLICY_FILE`, environmen
 | `SSH_MCP_PATH_DENY_PREFIXES` | protected system paths | Prefixes that are always denied. |
 | `SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES` | OS temp directory | MCP-server-host local prefixes allowed for `file_upload` sources and `file_download` destinations. |
 | `SSH_MCP_LOCAL_PATH_DENY_PREFIXES` | unset | MCP-server-host local prefixes that are always denied for transfers. |
+| `SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS` | `127.0.0.1,localhost,::1` | Bind-host allow-list for tunnel endpoints exposed by the MCP server. |
+| `SSH_MCP_TUNNEL_DENY_BIND_HOSTS` | `0.0.0.0,::` | Bind-host deny-list for broad listener addresses. |
+| `SSH_MCP_TUNNEL_ALLOW_REMOTE_HOSTS` | unset | Optional remote tunnel destination host allow-list, supporting literal values or regular expressions. |
+| `SSH_MCP_TUNNEL_DENY_REMOTE_HOSTS` | unset | Remote tunnel destination hosts that are always denied. |
+| `SSH_MCP_TUNNEL_ALLOW_PORTS` | unset | Optional tunnel port allow-list, supporting individual ports or ranges such as `1024-65535`. |
+| `SSH_MCP_TUNNEL_DENY_PORTS` | unset | Tunnel ports that are always denied. |
 
 Example:
 
@@ -80,6 +87,10 @@ Example:
 | `SSH_MCP_HTTP_PORT` / `PORT` | `3000` | Bind port. |
 | `SSH_MCP_HTTP_BEARER_TOKEN_FILE` | unset | File containing the bearer token. Required for non-loopback bind. |
 | `SSH_MCP_HTTP_ALLOWED_ORIGINS` | loopback origins | Comma-separated Origin allow-list. Required for non-loopback bind. |
+| `SSH_MCP_HTTP_PUBLIC_URL` | unset | Required for non-loopback bind; stable public `/mcp` URL used in protected-resource metadata. |
+| `SSH_MCP_HTTP_TRUST_PROXY` | `false` | Trust reverse-proxy protocol headers only when explicitly enabled. |
+| `SSH_MCP_HTTP_MAX_SESSIONS` | `20` | Maximum concurrent Streamable HTTP/SSE sessions. |
+| `SSH_MCP_HTTP_SESSION_IDLE_TTL_MS` | `900000` | Idle TTL for abandoned HTTP sessions. |
 | `SSH_MCP_ENABLE_LEGACY_SSE` | `false` | Enables compatibility `/sse` and `/messages` endpoints for one v2 cycle. |
 
 ## Example `.env`
@@ -94,12 +105,18 @@ SSH_MCP_MAX_SESSIONS=50
 SSH_MCP_SESSION_TTL=1800000
 SSH_MCP_COMMAND_TIMEOUT=45000
 SSH_MCP_MAX_FILE_SIZE=10485760
+SSH_MCP_MAX_FILE_WRITE_BYTES=10485760
 SSH_MCP_MAX_COMMAND_OUTPUT_BYTES=1048576
 SSH_MCP_MAX_STREAM_CHUNKS=4096
 SSH_MCP_MAX_TRANSFER_BYTES=52428800
 SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES=/var/tmp/mcp-ssh-tool
+SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS=127.0.0.1,localhost
+SSH_MCP_TUNNEL_DENY_BIND_HOSTS=0.0.0.0,::
+SSH_MCP_TUNNEL_DENY_PORTS=2375,2376
 SSH_MCP_HTTP_HOST=127.0.0.1
 SSH_MCP_HTTP_PORT=3000
+SSH_MCP_HTTP_MAX_SESSIONS=20
+SSH_MCP_HTTP_SESSION_IDLE_TTL_MS=900000
 ```
 
 ## Per-Session Overrides

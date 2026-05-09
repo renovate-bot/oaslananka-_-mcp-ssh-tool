@@ -4,6 +4,7 @@ import { MetricsCollector } from "./metrics.js";
 import { PolicyEngine } from "./policy.js";
 import { RateLimiter } from "./rate-limiter.js";
 import { SessionManager } from "./session.js";
+import { createTunnelService, type TunnelService } from "./tunnel.js";
 
 function auditDetails(
   action: string,
@@ -28,6 +29,7 @@ export interface AppContainer {
   auditLog: AuditLog;
   policy: PolicyEngine;
   sessionManager: SessionManager;
+  tunnelService: TunnelService;
 }
 
 export function createContainer(configOverrides: Partial<ServerConfig> = {}): AppContainer {
@@ -57,6 +59,14 @@ export function createContainer(configOverrides: Partial<ServerConfig> = {}): Ap
     config.get("security"),
     policy,
   );
+  const tunnelService = createTunnelService({
+    sessionManager,
+    metrics,
+    policy,
+  });
+  sessionManager.onSessionClose(async (sessionId) => {
+    await tunnelService.closeSessionTunnels(sessionId);
+  });
 
   return {
     config,
@@ -65,6 +75,7 @@ export function createContainer(configOverrides: Partial<ServerConfig> = {}): Ap
     auditLog,
     policy,
     sessionManager,
+    tunnelService,
   };
 }
 
@@ -98,6 +109,28 @@ export function createTestContainer(overrides: Partial<AppContainer> = {}): AppC
       );
     });
 
+  const sessionManager =
+    overrides.sessionManager ??
+    new SessionManager(
+      config.get("maxSessions"),
+      config.get("sessionTtlMs"),
+      config.get("cleanupIntervalMs"),
+      config.get("security"),
+      policy,
+    );
+  const tunnelService =
+    overrides.tunnelService ??
+    createTunnelService({
+      sessionManager,
+      metrics,
+      policy,
+    });
+  if (!overrides.tunnelService) {
+    sessionManager.onSessionClose(async (sessionId) => {
+      await tunnelService.closeSessionTunnels(sessionId);
+    });
+  }
+
   return {
     config,
     rateLimiter:
@@ -110,14 +143,7 @@ export function createTestContainer(overrides: Partial<AppContainer> = {}): AppC
     metrics,
     auditLog,
     policy,
-    sessionManager:
-      overrides.sessionManager ??
-      new SessionManager(
-        config.get("maxSessions"),
-        config.get("sessionTtlMs"),
-        config.get("cleanupIntervalMs"),
-        config.get("security"),
-        policy,
-      ),
+    sessionManager,
+    tunnelService,
   };
 }

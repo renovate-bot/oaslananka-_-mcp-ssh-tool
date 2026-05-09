@@ -13,7 +13,7 @@ As of the current OpenAI Apps SDK documentation, app submission is a dashboard r
 | Remote connector profile | `SSH_MCP_TOOL_PROFILE=chatgpt` |
 | Safe remote tools | `connector_status`, `ssh_hosts_list`, `ssh_policy_explain`, `ssh_host_inspect`, `ssh_mutation_plan` |
 | OAuth/JWKS runtime path | Available for production resource-server token validation |
-| Public HTTPS backend | Not configured |
+| Public HTTPS backend | Bearer-protected staging endpoint: `https://sshautomator.oaslananka.dev/mcp` |
 | App dashboard setup | Not configured |
 | Domain verification | Not configured |
 | Widget/component bundle | Not configured |
@@ -22,7 +22,7 @@ As of the current OpenAI Apps SDK documentation, app submission is a dashboard r
 
 `apps/chatgpt/app-readiness.json` intentionally sets `publishReady` to `false`.
 
-The validator is fail-fast by design. If OpenAI app publishing setup is incomplete, the repository must keep `publishReady=false`; it must not invent a production manifest or publish workflow.
+The validator is fail-fast by design. If OpenAI app publishing setup is incomplete, the repository must keep `publishReady=false`; it must not invent a production manifest or publish workflow. A live bearer-protected staging endpoint is not enough to mark app publishing ready.
 
 ## Security Model
 
@@ -86,6 +86,16 @@ Bearer auth remains supported for local development and existing deployments. Pu
 - `SSH_MCP_OAUTH_REQUIRED_SCOPES`
 
 The server exposes protected resource metadata at `/.well-known/oauth-protected-resource`. Keep `publishReady=false` until the production HTTPS endpoint, OAuth provider, domain verification, privacy/support links, screenshots, and review test cases are ready.
+
+## Developer Mode Form
+
+Use these values only after the matching auth mode is configured:
+
+| Field | Value |
+|-------|-------|
+| Website URL | `https://sshautomator.oaslananka.dev` |
+| MCP Server URL | `https://sshautomator.oaslananka.dev/mcp` |
+| Authentication | OAuth for production app review; the current staging endpoint is bearer-protected and must not be submitted as no-auth. |
 
 ## Production Checklist
 

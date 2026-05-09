@@ -6,8 +6,8 @@ Thank you for your interest in contributing to mcp-ssh-tool! This document provi
 
 ### Prerequisites
 
-- Node.js 24.14.1 LTS for local development (`.nvmrc` and `.node-version` are included)
-- pnpm 11.0.8 through Corepack
+- Node.js 24.15.0 LTS for local development (`.nvmrc` and `.node-version` are included)
+- pnpm 11.0.9 through Corepack
 - Git
 
 ### Getting Started
@@ -24,7 +24,7 @@ Thank you for your interest in contributing to mcp-ssh-tool! This document provi
 
    ```bash
    corepack enable
-   corepack prepare pnpm@11.0.8 --activate
+   corepack prepare pnpm@11.0.9 --activate
    pnpm install --frozen-lockfile
    ```
 

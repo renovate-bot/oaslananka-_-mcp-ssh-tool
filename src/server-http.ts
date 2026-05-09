@@ -12,13 +12,19 @@ import { SERVER_VERSION, SSHMCPServer } from "./mcp.js";
 import { logger } from "./logging.js";
 import { isOAuthAuthorizationValid, type OAuthVerificationConfig } from "./oauth.js";
 import { initTelemetry, shutdownTelemetry, withSpan } from "./telemetry.js";
-import { corsHeaders, isOriginAllowed, validateHttpStartupConfig } from "./http-security.js";
+import {
+  corsHeaders,
+  isLoopbackHost,
+  isOriginAllowed,
+  validateHttpStartupConfig,
+} from "./http-security.js";
 
 type HttpTransport = StreamableHTTPServerTransport | SSEServerTransport;
 
 interface HttpSession {
   server: SSHMCPServer;
   transport: HttpTransport;
+  lastSeenAt: number;
 }
 
 const endpoint = "/mcp";
@@ -57,11 +63,101 @@ function sendJson(
   res.end(JSON.stringify(payload, null, 2));
 }
 
+function configuredPublicMcpUrl(): string | undefined {
+  if (!httpConfig.publicUrl) {
+    return undefined;
+  }
+
+  const url = new URL(httpConfig.publicUrl);
+  if (url.pathname === "" || url.pathname === "/") {
+    url.pathname = endpoint;
+  } else if (!url.pathname.endsWith(endpoint)) {
+    url.pathname = `${url.pathname.replace(/\/$/u, "")}${endpoint}`;
+  }
+  return url.toString();
+}
+
 function buildPublicMcpUrl(req: IncomingMessage): string {
-  const proto = req.headers["x-forwarded-proto"] ?? "https";
-  const protocol = Array.isArray(proto) ? proto[0] : proto;
+  const configured = configuredPublicMcpUrl();
+  if (configured) {
+    return configured;
+  }
+
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const rawProtocol = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+  const protocol =
+    httpConfig.trustProxy && (rawProtocol === "http" || rawProtocol === "https")
+      ? rawProtocol
+      : isLoopbackHost(httpConfig.host)
+        ? "http"
+        : "https";
   return `${protocol}://${req.headers.host ?? `localhost:${httpConfig.port}`}${endpoint}`;
 }
+
+function isHttpSessionExpired(session: HttpSession, now = Date.now()): boolean {
+  return now - session.lastSeenAt > httpConfig.sessionIdleTtlMs;
+}
+
+function removeHttpSession(sessionId: string, reason: string): void {
+  if (sessions.delete(sessionId)) {
+    logger.info("HTTP MCP session removed", { sessionId, reason });
+  }
+}
+
+function closeHttpSession(sessionId: string, reason: string): void {
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return;
+  }
+
+  removeHttpSession(sessionId, reason);
+  void session.transport.close().catch((error) => {
+    logger.warn("Failed to close HTTP MCP transport cleanly", { sessionId, error });
+  });
+}
+
+function cleanupExpiredHttpSessions(): void {
+  const now = Date.now();
+  for (const [sessionId, session] of sessions) {
+    if (isHttpSessionExpired(session, now)) {
+      closeHttpSession(sessionId, "idle-timeout");
+    }
+  }
+}
+
+function getHttpSession(sessionId: string | undefined): HttpSession | undefined {
+  if (!sessionId) {
+    return undefined;
+  }
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return undefined;
+  }
+  if (isHttpSessionExpired(session)) {
+    closeHttpSession(sessionId, "idle-timeout");
+    return undefined;
+  }
+  session.lastSeenAt = Date.now();
+  return session;
+}
+
+function canOpenHttpSession(req: IncomingMessage, res: ServerResponse): boolean {
+  cleanupExpiredHttpSessions();
+  if (sessions.size < httpConfig.maxSessions) {
+    return true;
+  }
+  sendJson(req, res, 503, {
+    error: "HTTP MCP session limit reached",
+    maxSessions: httpConfig.maxSessions,
+  });
+  return false;
+}
+
+const httpSessionCleanupInterval = setInterval(
+  cleanupExpiredHttpSessions,
+  Math.max(1000, Math.min(httpConfig.sessionIdleTtlMs, 60_000)),
+);
+httpSessionCleanupInterval.unref?.();
 
 function protectedResourceMetadata(req: IncomingMessage): Record<string, unknown> {
   return {
@@ -142,7 +238,8 @@ async function handleStreamableRequest(
     async (span) => {
       const sessionHeader = req.headers["mcp-session-id"];
       const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
-      let session = sessionId ? sessions.get(sessionId) : undefined;
+      cleanupExpiredHttpSessions();
+      let session = getHttpSession(sessionId);
 
       span.setAttribute("http.route", endpoint);
       span.setAttribute("http.method", req.method ?? "UNKNOWN");
@@ -151,10 +248,13 @@ async function handleStreamableRequest(
       }
 
       if (!session && req.method === "POST" && isInitializeRequest(parsedBody)) {
+        if (!canOpenHttpSession(req, res)) {
+          return;
+        }
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (newSessionId) => {
-            sessions.set(newSessionId, { server, transport });
+            sessions.set(newSessionId, { server, transport, lastSeenAt: Date.now() });
             logger.info("Streamable HTTP MCP session initialized", { sessionId: newSessionId });
           },
         });
@@ -162,15 +262,14 @@ async function handleStreamableRequest(
         transport.onclose = () => {
           const closedSessionId = transport.sessionId;
           if (closedSessionId) {
-            sessions.delete(closedSessionId);
-            logger.info("Streamable HTTP MCP session closed", { sessionId: closedSessionId });
+            removeHttpSession(closedSessionId, "transport-closed");
           }
         };
         transport.onerror = (error) => {
           logger.error("Streamable HTTP MCP transport error", { error: error.message });
         };
         await server.connect(transport as Transport);
-        session = { server, transport };
+        session = { server, transport, lastSeenAt: Date.now() };
       }
 
       if (!session) {
@@ -203,19 +302,18 @@ async function handleStreamableRequest(
   );
 }
 
-async function handleLegacySseConnection(
-  _req: IncomingMessage,
-  res: ServerResponse,
-): Promise<void> {
+async function handleLegacySseConnection(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!canOpenHttpSession(req, res)) {
+    return;
+  }
   const transport = new SSEServerTransport(legacyMessageEndpoint, res);
   const sessionId = transport.sessionId;
   const server = new SSHMCPServer(container);
 
   transport.onclose = () => {
-    sessions.delete(sessionId);
-    logger.info("Legacy HTTP/SSE MCP session closed", { sessionId });
+    removeHttpSession(sessionId, "legacy-transport-closed");
   };
-  sessions.set(sessionId, { server, transport });
+  sessions.set(sessionId, { server, transport, lastSeenAt: Date.now() });
   await server.connect(transport);
   logger.warn("Legacy HTTP/SSE MCP session established", { sessionId });
 }
@@ -229,7 +327,7 @@ async function handleLegacyMessage(req: IncomingMessage, res: ServerResponse): P
     return;
   }
 
-  const session = sessions.get(sessionId);
+  const session = getHttpSession(sessionId);
   if (!session || !(session.transport instanceof SSEServerTransport)) {
     sendJson(req, res, 404, { error: "Legacy SSE session not found" });
     return;
@@ -335,6 +433,7 @@ async function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down HTTP MCP server...`);
 
   httpServer.close();
+  clearInterval(httpSessionCleanupInterval);
 
   await Promise.all(
     Array.from(sessions.entries()).map(async ([sessionId, session]) => {

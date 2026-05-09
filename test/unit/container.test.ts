@@ -11,6 +11,7 @@ describe("createContainer", () => {
     expect(container.rateLimiter).toBeDefined();
     expect(container.metrics).toBeDefined();
     expect(container.sessionManager).toBeDefined();
+    expect(container.tunnelService).toBeDefined();
 
     container.rateLimiter.destroy();
     await container.sessionManager.destroy();
@@ -48,6 +49,7 @@ describe("createTestContainer", () => {
 
     expect(container.metrics).toBe(customMetrics);
     expect(container.config).toBe(customConfig);
+    expect(container.tunnelService).toBeDefined();
     expect(container.sessionManager.getActiveSessions()).toEqual([]);
 
     container.rateLimiter.destroy();

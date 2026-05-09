@@ -45,14 +45,14 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 24.14.1
+          node-version: 24.15.0
           package-manager-cache: false
 
       - name: Enable pnpm
         run: |
           set -euo pipefail
           corepack enable
-          corepack prepare pnpm@11.0.8 --activate
+          corepack prepare pnpm@11.0.9 --activate
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -71,7 +71,7 @@ jobs:
         include:
           - node: 22.22.2
             node_major: 22
-          - node: 24.14.1
+          - node: 24.15.0
             node_major: 24
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           corepack enable
-          corepack prepare pnpm@11.0.8 --activate
+          corepack prepare pnpm@11.0.9 --activate
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -104,7 +104,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload coverage artifact
-        if: always() && matrix.node == '24.14.1'
+        if: always() && matrix.node == '24.15.0'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: coverage
@@ -112,7 +112,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Export Codecov token from Doppler
-        if: matrix.node == '24.14.1' && env.HAS_DOPPLER_TOKEN == 'true'
+        if: matrix.node == '24.15.0' && env.HAS_DOPPLER_TOKEN == 'true'
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
@@ -138,7 +138,7 @@ jobs:
           printf 'CODECOV_TOKEN=%s\n' "$CODECOV_TOKEN" >> "$GITHUB_ENV"
 
       - name: Upload coverage to Codecov
-        if: matrix.node == '24.14.1' && env.HAS_DOPPLER_TOKEN == 'true'
+        if: matrix.node == '24.15.0' && env.HAS_DOPPLER_TOKEN == 'true'
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
         with:
           files: coverage/lcov.info
@@ -157,14 +157,14 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 24.14.1
+          node-version: 24.15.0
           package-manager-cache: false
 
       - name: Enable pnpm
         run: |
           set -euo pipefail
           corepack enable
-          corepack prepare pnpm@11.0.8 --activate
+          corepack prepare pnpm@11.0.9 --activate
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -209,14 +209,14 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 24.14.1
+          node-version: 24.15.0
           package-manager-cache: false
 
       - name: Enable pnpm
         run: |
           set -euo pipefail
           corepack enable
-          corepack prepare pnpm@11.0.8 --activate
+          corepack prepare pnpm@11.0.9 --activate
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -231,7 +231,7 @@ jobs:
           pnpm run sbom
           PACKAGE_FILE="$(
             pnpm pack --pack-destination artifacts --json |
-              node -e "const path = require('node:path'); let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { const p = JSON.parse(d); const r = Array.isArray(p) ? p[0] : p; console.log(path.basename(r.filename || r.name || r.path)); });"
+              node scripts/extract-pack-filename.mjs
           )"
           sha256sum "artifacts/$PACKAGE_FILE" > "artifacts/$PACKAGE_FILE.sha256"
 

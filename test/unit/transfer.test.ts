@@ -28,6 +28,12 @@ function createTransferPolicy(
     pathDenyPrefixes: [],
     localPathAllowPrefixes,
     localPathDenyPrefixes: [],
+    tunnelAllowBindHosts: [],
+    tunnelDenyBindHosts: [],
+    tunnelAllowRemoteHosts: [],
+    tunnelDenyRemoteHosts: [],
+    tunnelAllowPorts: [],
+    tunnelDenyPorts: [],
     ...overrides,
   });
 }

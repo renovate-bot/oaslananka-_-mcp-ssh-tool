@@ -51,6 +51,12 @@ e2eDescribe("SSH MCP Server E2E Tests", () => {
         pathDenyPrefixes: [],
         localPathAllowPrefixes: [],
         localPathDenyPrefixes: [],
+        tunnelAllowBindHosts: ["127.0.0.1", "localhost", "::1"],
+        tunnelDenyBindHosts: ["0.0.0.0", "::"],
+        tunnelAllowRemoteHosts: [],
+        tunnelDenyRemoteHosts: [],
+        tunnelAllowPorts: [],
+        tunnelDenyPorts: [],
       },
     });
     processService = createProcessService({

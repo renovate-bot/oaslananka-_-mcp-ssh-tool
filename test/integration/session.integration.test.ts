@@ -40,6 +40,12 @@ integrationDescribe("SSH integration tests", () => {
         pathDenyPrefixes: [],
         localPathAllowPrefixes: [os.tmpdir()],
         localPathDenyPrefixes: [],
+        tunnelAllowBindHosts: ["127.0.0.1", "localhost", "::1"],
+        tunnelDenyBindHosts: ["0.0.0.0", "::"],
+        tunnelAllowRemoteHosts: [],
+        tunnelDenyRemoteHosts: [],
+        tunnelAllowPorts: [],
+        tunnelDenyPorts: [],
       },
     });
     processService = createProcessService({

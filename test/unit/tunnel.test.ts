@@ -5,6 +5,7 @@ import { createAllowPolicy, createSessionInfo, createTunnelMetrics } from "./hel
 describe("createTunnelService", () => {
   test("creates, lists, and closes tunnels", async () => {
     const dispose = jest.fn(async () => undefined);
+    const policy = createAllowPolicy();
     const service = createTunnelService({
       sessionManager: {
         getSession: () =>
@@ -17,7 +18,7 @@ describe("createTunnelService", () => {
           }) as any,
       },
       metrics: createTunnelMetrics(),
-      policy: createAllowPolicy(),
+      policy,
     });
 
     const local = await service.createLocalForward("session-1", 0, "db", 5432);
@@ -25,6 +26,17 @@ describe("createTunnelService", () => {
 
     expect(service.listTunnels()).toHaveLength(2);
     expect(service.listTunnels("session-1")).toEqual(expect.arrayContaining([local, remote]));
+    expect(policy.assertAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "tunnel.local",
+        host: "db",
+        localBindHost: "localhost",
+        localPort: 0,
+        remoteHost: "db",
+        remotePort: 5432,
+      }),
+    );
+    expect(policy.assertAllowed.mock.calls[0]?.[0]).not.toHaveProperty("path");
     await expect(service.closeTunnel(local.id)).resolves.toBe(true);
     await expect(service.closeSessionTunnels("session-1")).resolves.toBe(1);
   });

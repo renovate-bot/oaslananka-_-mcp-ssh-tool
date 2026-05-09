@@ -1,4 +1,5 @@
 import type { SFTPWrapper, Stats, FileEntry } from "ssh2";
+import { randomUUID } from "node:crypto";
 import { createFilesystemError, createLimitError, wrapError } from "./errors.js";
 import { logger } from "./logging.js";
 import { buildRemoteCommand } from "./shell.js";
@@ -31,7 +32,7 @@ export interface FsService {
 export interface FsServiceDeps {
   sessionManager: Pick<SessionManager, "getSession" | "getOSInfo">;
   metrics: Pick<MetricsCollector, "recordFileRead" | "recordFileWrite" | "recordFileDelete">;
-  config: Pick<ServerConfig, "maxFileSize">;
+  config: Pick<ServerConfig, "maxFileSize" | "maxFileWriteBytes">;
   policy: Pick<PolicyEngine, "assertAllowed">;
 }
 
@@ -45,6 +46,15 @@ function createDirListResult(entries: DirEntry[], nextToken?: string): DirListRe
 
 function hasSftp(session: { sftp?: unknown } | undefined): boolean {
   return !!session?.sftp;
+}
+
+function tempPathFor(targetPath: string): string {
+  const normalizedPath = targetPath.replace(/\\/g, "/");
+  const slashIndex = normalizedPath.lastIndexOf("/");
+  const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex + 1) : "";
+  const baseName = slashIndex >= 0 ? normalizedPath.slice(slashIndex + 1) : normalizedPath;
+  const safeBaseName = baseName.length > 0 ? baseName : "write";
+  return `${directory}.${safeBaseName}.${randomUUID()}.tmp`;
 }
 
 function getSftpOrThrow(session: { sftp?: SFTPWrapper }): SFTPWrapper {
@@ -250,7 +260,7 @@ export function createFsService({
         mode: session.info.policyMode,
       });
       const effectiveMaxBytes = maxBytes ?? config.maxFileSize;
-      const size = await getFileSize(sessionId, path);
+      const size = await getFileSizeInternal(sessionId, path);
       if (size > effectiveMaxBytes) {
         throw createLimitError(
           `File ${path} is ${size} bytes, which exceeds the ${effectiveMaxBytes} byte read limit`,
@@ -312,8 +322,16 @@ export function createFsService({
         return true;
       }
 
+      const writeBytes = Buffer.byteLength(data, "utf8");
+      if (writeBytes > config.maxFileWriteBytes) {
+        throw createLimitError(
+          `Write payload is ${writeBytes} bytes, which exceeds the ${config.maxFileWriteBytes} byte write limit`,
+          "Use file_upload for large files or raise SSH_MCP_MAX_FILE_WRITE_BYTES intentionally.",
+        );
+      }
+
       if (!hasSftp(session)) {
-        const tempPath = `${path}.tmp.${Date.now()}`;
+        const tempPath = tempPathFor(path);
         const chmodCommand =
           mode !== undefined ? `chmod ${mode.toString(8)} ${shellQuote(tempPath)}\n` : "";
 
@@ -322,7 +340,7 @@ export function createFsService({
           `printf %s ${shellQuote(data)} > ${shellQuote(tempPath)}\n${chmodCommand}mv ${shellQuote(tempPath)} ${shellQuote(path)}`,
         );
 
-        metrics.recordFileWrite(Buffer.byteLength(data, "utf8"));
+        metrics.recordFileWrite(writeBytes);
         logger.debug("File written successfully via SSH fallback", {
           sessionId,
           path,
@@ -331,17 +349,18 @@ export function createFsService({
       }
 
       const sftp = getSftpOrThrow(session);
-      const tempPath = `${path}.tmp.${Date.now()}`;
+      const tempPath = tempPathFor(path);
+      const dataBuffer = Buffer.from(data, "utf8");
 
       try {
-        await sftpWriteFile(sftp, tempPath, Buffer.from(data, "utf8"));
+        await sftpWriteFile(sftp, tempPath, dataBuffer);
 
         if (mode !== undefined) {
           await sftpChmod(sftp, tempPath, mode);
         }
 
         await sftpRename(sftp, tempPath, path);
-        metrics.recordFileWrite(Buffer.byteLength(data, "utf8"));
+        metrics.recordFileWrite(writeBytes);
 
         logger.debug("File written successfully", { sessionId, path });
         return true;
@@ -367,6 +386,65 @@ export function createFsService({
     }
   }
 
+  async function statFileInternal(sessionId: string, path: string): Promise<FileStatInfo> {
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found or expired`);
+    }
+
+    if (!hasSftp(session)) {
+      const output = await execFallback(
+        sessionId,
+        `target=${shellQuote(path)}; ${PORTABLE_STAT_COMMAND}`,
+      );
+
+      const [type = "other", size = "0", mtime = "0", mode = "0"] = output.trim().split("\t");
+      return {
+        size: Number(size),
+        mtime: new Date(Number(mtime) * 1000),
+        mode: parseInt(mode, 8),
+        type: type as FileStatInfo["type"],
+      };
+    }
+
+    const sftp = getSftpOrThrow(session);
+    const stats = await sftpStat(sftp, path);
+
+    let type: FileStatInfo["type"] = "other";
+    const mode = stats.mode ?? 0;
+
+    if ((mode & 0o170000) === 0o100000) {
+      type = "file";
+    } else if ((mode & 0o170000) === 0o040000) {
+      type = "directory";
+    } else if ((mode & 0o170000) === 0o120000) {
+      type = "symlink";
+    } else if (typeof stats.isFile === "function") {
+      if (stats.isFile()) {
+        type = "file";
+      } else if (stats.isDirectory()) {
+        type = "directory";
+      } else if (stats.isSymbolicLink?.()) {
+        type = "symlink";
+      }
+    }
+
+    const statInfo: FileStatInfo = {
+      size: stats.size ?? 0,
+      mtime: new Date(typeof stats.mtime === "number" ? stats.mtime * 1000 : Date.now()),
+      mode,
+      type,
+    };
+
+    logger.debug("File stats retrieved", {
+      sessionId,
+      path,
+      type,
+      size: stats.size,
+    });
+    return statInfo;
+  }
+
   async function statFile(sessionId: string, path: string): Promise<FileStatInfo> {
     logger.debug("Getting file stats", { sessionId, path });
 
@@ -376,57 +454,13 @@ export function createFsService({
     }
 
     try {
-      if (!hasSftp(session)) {
-        const output = await execFallback(
-          sessionId,
-          `target=${shellQuote(path)}; ${PORTABLE_STAT_COMMAND}`,
-        );
-
-        const [type = "other", size = "0", mtime = "0", mode = "0"] = output.trim().split("\t");
-        return {
-          size: Number(size),
-          mtime: new Date(Number(mtime) * 1000),
-          mode: parseInt(mode, 8),
-          type: type as FileStatInfo["type"],
-        };
-      }
-
-      const sftp = getSftpOrThrow(session);
-      const stats = await sftpStat(sftp, path);
-
-      let type: FileStatInfo["type"] = "other";
-      const mode = stats.mode ?? 0;
-
-      if ((mode & 0o170000) === 0o100000) {
-        type = "file";
-      } else if ((mode & 0o170000) === 0o040000) {
-        type = "directory";
-      } else if ((mode & 0o170000) === 0o120000) {
-        type = "symlink";
-      } else if (typeof stats.isFile === "function") {
-        if (stats.isFile()) {
-          type = "file";
-        } else if (stats.isDirectory()) {
-          type = "directory";
-        } else if (stats.isSymbolicLink?.()) {
-          type = "symlink";
-        }
-      }
-
-      const statInfo: FileStatInfo = {
-        size: stats.size ?? 0,
-        mtime: new Date(typeof stats.mtime === "number" ? stats.mtime * 1000 : Date.now()),
-        mode,
-        type,
-      };
-
-      logger.debug("File stats retrieved", {
-        sessionId,
+      policy.assertAllowed({
+        action: "fs.stat",
         path,
-        type,
-        size: stats.size,
+        mode: session.info.policyMode,
       });
-      return statInfo;
+
+      return await statFileInternal(sessionId, path);
     } catch (error) {
       logger.error("Failed to get file stats", { sessionId, path, error });
       throw wrapError(
@@ -451,6 +485,12 @@ export function createFsService({
     }
 
     try {
+      policy.assertAllowed({
+        action: "fs.list",
+        path,
+        mode: session.info.policyMode,
+      });
+
       if (!hasSftp(session)) {
         const output = await execFallback(
           sessionId,
@@ -688,6 +728,11 @@ export function createFsService({
 
   async function getFileSize(sessionId: string, path: string): Promise<number> {
     const stats = await statFile(sessionId, path);
+    return stats.size;
+  }
+
+  async function getFileSizeInternal(sessionId: string, path: string): Promise<number> {
+    const stats = await statFileInternal(sessionId, path);
     return stats.size;
   }
 

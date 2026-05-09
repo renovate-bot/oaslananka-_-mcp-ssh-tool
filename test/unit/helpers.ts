@@ -20,6 +20,7 @@ export function createTestConfig() {
     maxCommandOutputBytes: 1024 * 1024,
     maxStreamChunks: 4096,
     maxFileSize: 1024 * 1024,
+    maxFileWriteBytes: 1024 * 1024,
     maxTransferBytes: 50 * 1024 * 1024,
   };
 }

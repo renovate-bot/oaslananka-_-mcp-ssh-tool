@@ -15,6 +15,12 @@ function policy(overrides: Partial<PolicyConfig> = {}) {
     pathDenyPrefixes: ["/etc/shadow"],
     localPathAllowPrefixes: ["/tmp"],
     localPathDenyPrefixes: [],
+    tunnelAllowBindHosts: ["127.0.0.1", "localhost"],
+    tunnelDenyBindHosts: ["0.0.0.0"],
+    tunnelAllowRemoteHosts: [],
+    tunnelDenyRemoteHosts: [],
+    tunnelAllowPorts: [],
+    tunnelDenyPorts: [],
     ...overrides,
   });
 }
@@ -191,6 +197,68 @@ describe("PolicyEngine", () => {
         path: "/tmp/allowed/blocked/file.txt",
       }),
     ).toThrow("denied by policy");
+  });
+
+  test("enforces dedicated tunnel host and port policy", () => {
+    const engine = policy({
+      tunnelAllowBindHosts: ["127.0.0.1"],
+      tunnelDenyBindHosts: ["0.0.0.0"],
+      tunnelAllowRemoteHosts: ["^db-[0-9]+\\.internal$"],
+      tunnelDenyRemoteHosts: ["metadata.internal"],
+      tunnelAllowPorts: ["1024-65535"],
+      tunnelDenyPorts: ["2375", "2376"],
+    });
+
+    expect(
+      engine.assertAllowed({
+        action: "tunnel.local",
+        host: "ssh-gateway",
+        localBindHost: "127.0.0.1",
+        localPort: 15432,
+        remoteHost: "db-1.internal",
+        remotePort: 5432,
+      }),
+    ).toEqual(expect.objectContaining({ allowed: true }));
+
+    expect(() =>
+      engine.assertAllowed({
+        action: "tunnel.local",
+        localBindHost: "0.0.0.0",
+        localPort: 15432,
+        remoteHost: "db-1.internal",
+        remotePort: 5432,
+      }),
+    ).toThrow("bind host 0.0.0.0 is denied");
+
+    expect(() =>
+      engine.assertAllowed({
+        action: "tunnel.local",
+        localBindHost: "127.0.0.1",
+        localPort: 15432,
+        remoteHost: "metadata.internal",
+        remotePort: 5432,
+      }),
+    ).toThrow("remote host metadata.internal is denied");
+
+    expect(() =>
+      engine.assertAllowed({
+        action: "tunnel.local",
+        localBindHost: "127.0.0.1",
+        localPort: 80,
+        remoteHost: "db-1.internal",
+        remotePort: 5432,
+      }),
+    ).toThrow("port 80 is outside allowed policy");
+
+    expect(() =>
+      engine.assertAllowed({
+        action: "tunnel.local",
+        localBindHost: "127.0.0.1",
+        localPort: 15432,
+        remoteHost: "db-1.internal",
+        remotePort: 2375,
+      }),
+    ).toThrow("port 2375 is denied");
   });
 
   test("explain mode returns policy verdicts without throwing", () => {

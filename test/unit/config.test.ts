@@ -17,12 +17,19 @@ describe("ConfigManager", () => {
     delete process.env.STRICT_HOST_KEY_CHECKING;
     delete process.env.SSH_MCP_HOST_KEY_POLICY;
     delete process.env.SSH_MCP_MAX_FILE_SIZE;
+    delete process.env.SSH_MCP_MAX_FILE_WRITE_BYTES;
     delete process.env.SSH_MCP_MAX_TRANSFER_BYTES;
     delete process.env.SSH_MCP_POLICY_FILE;
     delete process.env.SSH_MCP_ALLOW_RAW_SUDO;
     delete process.env.SSH_MCP_COMMAND_DENY;
     delete process.env.SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES;
     delete process.env.SSH_MCP_LOCAL_PATH_DENY_PREFIXES;
+    delete process.env.SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS;
+    delete process.env.SSH_MCP_TUNNEL_DENY_BIND_HOSTS;
+    delete process.env.SSH_MCP_TUNNEL_ALLOW_REMOTE_HOSTS;
+    delete process.env.SSH_MCP_TUNNEL_DENY_REMOTE_HOSTS;
+    delete process.env.SSH_MCP_TUNNEL_ALLOW_PORTS;
+    delete process.env.SSH_MCP_TUNNEL_DENY_PORTS;
     delete process.env.SSH_MCP_HTTP_HOST;
     delete process.env.SSH_MCP_HTTP_PORT;
     delete process.env.SSH_MCP_TOOL_PROFILE;
@@ -33,6 +40,10 @@ describe("ConfigManager", () => {
     delete process.env.SSH_MCP_CONNECTOR_CREDENTIAL_COMMAND_TIMEOUT_MS;
     delete process.env.SSH_MCP_CONNECTOR_DEFAULT_USERNAME;
     delete process.env.SSH_MCP_HTTP_AUTH_MODE;
+    delete process.env.SSH_MCP_HTTP_PUBLIC_URL;
+    delete process.env.SSH_MCP_HTTP_TRUST_PROXY;
+    delete process.env.SSH_MCP_HTTP_MAX_SESSIONS;
+    delete process.env.SSH_MCP_HTTP_SESSION_IDLE_TTL_MS;
     delete process.env.SSH_MCP_OAUTH_ISSUER;
     delete process.env.SSH_MCP_OAUTH_AUDIENCE;
     delete process.env.SSH_MCP_OAUTH_JWKS_URL;
@@ -50,7 +61,12 @@ describe("ConfigManager", () => {
     expect(config.get("security").allowRootLogin).toBe(false);
     expect(config.get("policy").allowRawSudo).toBe(false);
     expect(config.get("policy").localPathAllowPrefixes?.length).toBeGreaterThan(0);
+    expect(config.get("policy").tunnelAllowBindHosts).toEqual(["127.0.0.1", "localhost", "::1"]);
+    expect(config.get("policy").tunnelDenyBindHosts).toEqual(["0.0.0.0", "::"]);
     expect(config.get("http").host).toBe("127.0.0.1");
+    expect(config.get("http").trustProxy).toBe(false);
+    expect(config.get("http").maxSessions).toBe(20);
+    expect(config.get("http").sessionIdleTtlMs).toBe(900000);
     expect(config.get("connector").toolProfile).toBe("full");
     expect(config.get("connector").credentialProvider).toBe("none");
     expect(config.get("auth").mode).toBe("bearer");
@@ -66,11 +82,18 @@ describe("ConfigManager", () => {
     process.env.SSH_MCP_RATE_LIMIT = "false";
     process.env.SSH_MCP_STRICT_HOST_KEY = "true";
     process.env.SSH_MCP_MAX_FILE_SIZE = "1024";
+    process.env.SSH_MCP_MAX_FILE_WRITE_BYTES = "2048";
     process.env.SSH_MCP_MAX_TRANSFER_BYTES = "4096";
     process.env.SSH_MCP_ALLOW_RAW_SUDO = "true";
     process.env.SSH_MCP_COMMAND_DENY = "rm -rf,shutdown";
     process.env.SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES = "/tmp/local,/var/tmp/local";
     process.env.SSH_MCP_LOCAL_PATH_DENY_PREFIXES = "/tmp/local/secret";
+    process.env.SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS = "127.0.0.1,localhost";
+    process.env.SSH_MCP_TUNNEL_DENY_BIND_HOSTS = "0.0.0.0";
+    process.env.SSH_MCP_TUNNEL_ALLOW_REMOTE_HOSTS = "db.internal,^cache-[0-9]+\\.internal$";
+    process.env.SSH_MCP_TUNNEL_DENY_REMOTE_HOSTS = "metadata.internal";
+    process.env.SSH_MCP_TUNNEL_ALLOW_PORTS = "1024-65535";
+    process.env.SSH_MCP_TUNNEL_DENY_PORTS = "2375,2376";
     process.env.SSH_MCP_HTTP_HOST = "localhost";
     process.env.SSH_MCP_HTTP_PORT = "4444";
     process.env.SSH_MCP_TOOL_PROFILE = "remote-readonly";
@@ -78,6 +101,10 @@ describe("ConfigManager", () => {
     process.env.SSH_MCP_CONNECTOR_CREDENTIAL_COMMAND_ARGS = "resolver.mjs,--json";
     process.env.SSH_MCP_CONNECTOR_DEFAULT_USERNAME = "deploy";
     process.env.SSH_MCP_HTTP_AUTH_MODE = "oauth";
+    process.env.SSH_MCP_HTTP_PUBLIC_URL = "https://mcp.example/mcp";
+    process.env.SSH_MCP_HTTP_TRUST_PROXY = "true";
+    process.env.SSH_MCP_HTTP_MAX_SESSIONS = "13";
+    process.env.SSH_MCP_HTTP_SESSION_IDLE_TTL_MS = "60000";
     process.env.SSH_MCP_OAUTH_ISSUER = "https://auth.example";
     process.env.SSH_MCP_OAUTH_AUDIENCE = "https://mcp.example/mcp";
     process.env.SSH_MCP_OAUTH_JWKS_URL = "https://auth.example/.well-known/jwks.json";
@@ -91,6 +118,7 @@ describe("ConfigManager", () => {
     expect(config.get("maxCommandOutputBytes")).toBe(2048);
     expect(config.get("maxStreamChunks")).toBe(12);
     expect(config.get("maxFileSize")).toBe(1024);
+    expect(config.get("maxFileWriteBytes")).toBe(2048);
     expect(config.get("maxTransferBytes")).toBe(4096);
     expect(config.get("debug")).toBe(true);
     expect(config.get("rateLimit").enabled).toBe(false);
@@ -99,8 +127,21 @@ describe("ConfigManager", () => {
     expect(config.get("policy").commandDeny).toEqual(["rm -rf", "shutdown"]);
     expect(config.get("policy").localPathAllowPrefixes).toEqual(["/tmp/local", "/var/tmp/local"]);
     expect(config.get("policy").localPathDenyPrefixes).toEqual(["/tmp/local/secret"]);
+    expect(config.get("policy").tunnelAllowBindHosts).toEqual(["127.0.0.1", "localhost"]);
+    expect(config.get("policy").tunnelDenyBindHosts).toEqual(["0.0.0.0"]);
+    expect(config.get("policy").tunnelAllowRemoteHosts).toEqual([
+      "db.internal",
+      "^cache-[0-9]+\\.internal$",
+    ]);
+    expect(config.get("policy").tunnelDenyRemoteHosts).toEqual(["metadata.internal"]);
+    expect(config.get("policy").tunnelAllowPorts).toEqual(["1024-65535"]);
+    expect(config.get("policy").tunnelDenyPorts).toEqual(["2375", "2376"]);
     expect(config.get("http").host).toBe("localhost");
     expect(config.get("http").port).toBe(4444);
+    expect(config.get("http").publicUrl).toBe("https://mcp.example/mcp");
+    expect(config.get("http").trustProxy).toBe(true);
+    expect(config.get("http").maxSessions).toBe(13);
+    expect(config.get("http").sessionIdleTtlMs).toBe(60000);
     expect(config.get("connector").toolProfile).toBe("remote-readonly");
     expect(config.get("connector").credentialProvider).toBe("agent");
     expect(config.get("connector").credentialCommandArgs).toEqual(["resolver.mjs", "--json"]);

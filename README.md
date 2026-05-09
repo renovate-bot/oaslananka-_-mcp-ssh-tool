@@ -55,7 +55,7 @@ Open a safe SSH session to prod-1 as deploy, inspect host capabilities, then sho
 
 ## Requirements
 
-- Node.js `22.22.2+` or `24.14.1+` (LTS only)
+- Node.js `22.22.2+` or `24.15.0+` (LTS only)
 - SSH access to target hosts
 - A populated `known_hosts` file for strict host verification, or an explicit per-session host-key policy
 
@@ -67,7 +67,7 @@ Open a safe SSH session to prod-1 as deploy, inspect host capabilities, then sho
 | Streamable HTTP | `mcp-ssh-tool --transport=http --host 127.0.0.1 --port 3000` | Remote MCP clients, reverse proxies, or Inspector sessions. |
 | legacy SSE | `mcp-ssh-tool --transport=http --enable-legacy-sse` | Temporary v1 compatibility only. Prefer Streamable HTTP. |
 
-Non-loopback HTTP startup is refused unless both `--bearer-token-file` and allowed origins are configured.
+Non-loopback HTTP startup is refused unless `--bearer-token-file`, allowed origins, and `SSH_MCP_HTTP_PUBLIC_URL` are configured.
 
 ## Secure Defaults
 
@@ -195,6 +195,7 @@ High-value environment variables:
 | `SSH_MCP_HOST_KEY_POLICY` | `strict` | `strict`, `accept-new`, or `insecure`. |
 | `SSH_MCP_KNOWN_HOSTS_PATH` | `~/.ssh/known_hosts` | Known-hosts file for strict verification. |
 | `SSH_MCP_MAX_FILE_SIZE` | `10485760` | Max bytes for `fs_read`. |
+| `SSH_MCP_MAX_FILE_WRITE_BYTES` | `10485760` | Max text payload bytes accepted by `fs_write` before buffering. |
 | `SSH_MCP_MAX_COMMAND_OUTPUT_BYTES` | `1048576` | Max retained stdout/stderr bytes per command or stream. |
 | `SSH_MCP_MAX_STREAM_CHUNKS` | `4096` | Max retained streaming chunks before truncation metadata is returned. |
 | `SSH_MCP_MAX_TRANSFER_BYTES` | `52428800` | Max bytes for `file_upload` and `file_download`. |
@@ -202,7 +203,17 @@ High-value environment variables:
 | `SSH_MCP_HTTP_HOST` | `127.0.0.1` | Streamable HTTP bind host. |
 | `SSH_MCP_HTTP_PORT` / `PORT` | `3000` | Streamable HTTP port. |
 | `SSH_MCP_HTTP_MAX_REQUEST_BODY_BYTES` | `1048576` | Max JSON request bytes accepted by Streamable HTTP. |
+| `SSH_MCP_HTTP_MAX_SESSIONS` | `20` | Max concurrent Streamable HTTP/SSE MCP sessions. |
+| `SSH_MCP_HTTP_SESSION_IDLE_TTL_MS` | `900000` | Idle TTL before abandoned HTTP sessions are closed. |
+| `SSH_MCP_HTTP_PUBLIC_URL` | unset | Required for non-loopback HTTP to publish stable protected-resource metadata. |
+| `SSH_MCP_HTTP_TRUST_PROXY` | `false` | Trust `X-Forwarded-Proto` only when explicitly set. |
 | `SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES` | OS temp directory | Local transfer allow-list for `file_upload` and `file_download`. |
+| `SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS` | `127.0.0.1,localhost,::1` | Tunnel bind-host allow-list. |
+| `SSH_MCP_TUNNEL_DENY_BIND_HOSTS` | `0.0.0.0,::` | Tunnel bind-host deny-list. |
+| `SSH_MCP_TUNNEL_ALLOW_REMOTE_HOSTS` | unset | Optional tunnel destination host allow-list. |
+| `SSH_MCP_TUNNEL_DENY_REMOTE_HOSTS` | unset | Tunnel destination host deny-list. |
+| `SSH_MCP_TUNNEL_ALLOW_PORTS` | unset | Optional tunnel port allow-list, including ranges such as `1024-65535`. |
+| `SSH_MCP_TUNNEL_DENY_PORTS` | unset | Tunnel port deny-list. |
 | `SSH_MCP_HTTP_BEARER_TOKEN_FILE` | unset | Required for non-loopback HTTP. |
 | `SSH_MCP_HTTP_ALLOWED_ORIGINS` | loopback origins | Comma-separated allowed origins. |
 

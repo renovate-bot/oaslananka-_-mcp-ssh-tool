@@ -117,6 +117,33 @@ describe("SessionManager", () => {
     expect(session?.ssh.dispose).toHaveBeenCalled();
   });
 
+  test("notifies session close listeners before resources are removed", async () => {
+    const events: string[] = [];
+    const result = await manager.openSession({
+      host: "example.com",
+      username: "demo",
+      password: "secret",
+      auth: "password",
+    });
+    const session = manager.getSession(result.sessionId);
+    if (!session) {
+      throw new Error("session not found");
+    }
+    const listener = jest.fn<(sessionId: string) => Promise<void>>(async () => {
+      expect(manager.getSession(result.sessionId)).toBe(session);
+      events.push("listener");
+    });
+    manager.onSessionClose(listener);
+    session.ssh.dispose = jest.fn(() => {
+      events.push("dispose");
+    }) as any;
+
+    await expect(manager.closeSession(result.sessionId)).resolves.toBe(true);
+
+    expect(listener).toHaveBeenCalledWith(result.sessionId);
+    expect(events.slice(0, 2)).toEqual(["listener", "dispose"]);
+  });
+
   test("uses policyHost for allowlist checks while connecting to the resolved host", async () => {
     const assertAllowed = jest.fn<(context: unknown) => { allowed: boolean }>(() => ({
       allowed: true,
@@ -501,6 +528,32 @@ describe("SessionManager", () => {
     expect(connectConfig).toEqual(
       expect.objectContaining({
         privateKey: "DISCOVERED KEY",
+      }),
+    );
+
+    fs.rmSync(keyDir, { recursive: true, force: true });
+  });
+
+  test("discovers OpenSSH FIDO security-key private keys", async () => {
+    const keyDir = fs.mkdtempSync(path.join(os.tmpdir(), "session-discover-sk-"));
+    const keyPath = path.join(keyDir, "id_ed25519_sk");
+    fs.writeFileSync(keyPath, "DISCOVERED SK KEY");
+    process.env.SSH_DEFAULT_KEY_DIR = keyDir;
+
+    const result = await manager.openSession({
+      host: "discover-sk.example",
+      username: "demo",
+      auth: "key",
+    });
+    const connectConfig = (
+      manager.getSession(result.sessionId)?.ssh as NodeSSH & {
+        __connectConfig?: Record<string, unknown>;
+      }
+    ).__connectConfig;
+
+    expect(connectConfig).toEqual(
+      expect.objectContaining({
+        privateKey: "DISCOVERED SK KEY",
       }),
     );
 

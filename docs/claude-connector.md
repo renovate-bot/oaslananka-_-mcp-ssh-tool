@@ -8,6 +8,10 @@ This repository includes a readiness scaffold in `apps/claude/connector-readines
 pnpm run validate:claude-connector
 ```
 
+The current bearer-protected staging MCP URL is
+`https://sshautomator.oaslananka.dev/mcp`. Keep `publishReady=false` until
+OAuth/JWKS and the remaining connector submission requirements are complete.
+
 ## Required Runtime Profile
 
 Run public Claude connector deployments with:
@@ -16,6 +20,8 @@ Run public Claude connector deployments with:
 SSH_MCP_TOOL_PROFILE=claude
 SSH_MCP_ALLOWED_HOSTS=prod-alias
 SSH_MCP_HTTP_AUTH_MODE=oauth
+SSH_MCP_HTTP_ALLOWED_ORIGINS=https://claude.ai
+SSH_MCP_HTTP_PUBLIC_URL=https://ssh-mcp.example/mcp
 SSH_MCP_OAUTH_ISSUER=https://auth.example
 SSH_MCP_OAUTH_AUDIENCE=https://ssh-mcp.example/mcp
 SSH_MCP_OAUTH_JWKS_URL=https://auth.example/.well-known/jwks.json

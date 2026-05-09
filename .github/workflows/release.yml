@@ -11,7 +11,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  PNPM_VERSION: 11.0.8
+  PNPM_VERSION: 11.0.9
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
@@ -66,7 +66,7 @@ jobs:
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 24.14.1
+          node-version: 24.15.0
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
 
@@ -90,7 +90,7 @@ jobs:
           pnpm run sbom
           PACKAGE_FILE="$(
             pnpm pack --pack-destination artifacts --json |
-              node -e "const path = require('node:path'); let d=''; process.stdin.on('data', c => d += c); process.stdin.on('end', () => { const p = JSON.parse(d); const r = Array.isArray(p) ? p[0] : p; console.log(path.basename(r.filename || r.name || r.path)); });"
+              node scripts/extract-pack-filename.mjs
           )"
           sha256sum "artifacts/${PACKAGE_FILE}" > "artifacts/${PACKAGE_FILE}.sha256"
           sha256sum artifacts/sbom.cdx.json > artifacts/sbom.cdx.json.sha256

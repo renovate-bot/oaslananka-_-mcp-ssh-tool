@@ -18,7 +18,10 @@ describe("HTTP transport security guards", () => {
       ),
     ).not.toThrow();
     expect(isLoopbackHost("localhost")).toBe(true);
+    expect(isLoopbackHost("api.localhost")).toBe(true);
+    expect(isLoopbackHost("127.12.0.9")).toBe(true);
     expect(isLoopbackHost("::1")).toBe(true);
+    expect(isLoopbackHost("0:0:0:0:0:0:0:1")).toBe(true);
   });
 
   test("rejects non-loopback startup without bearer token and origins", () => {
@@ -40,13 +43,14 @@ describe("HTTP transport security guards", () => {
           host: "0.0.0.0",
           allowedOrigins: ["https://chatgpt.com"],
           bearerTokenFile: "/tmp/token",
+          publicUrl: "https://mcp.example/mcp",
         },
         "",
       ),
     ).toThrow("empty bearer token file");
   });
 
-  test("allows non-loopback startup only with bearer token and origins", () => {
+  test("rejects non-loopback startup without a configured public URL", () => {
     expect(() =>
       validateHttpStartupConfig(
         {
@@ -62,7 +66,47 @@ describe("HTTP transport security guards", () => {
           oauthConfigured: false,
         },
       ),
+    ).toThrow("SSH_MCP_HTTP_PUBLIC_URL");
+  });
+
+  test("allows non-loopback startup only with bearer token, origins, and public URL", () => {
+    expect(() =>
+      validateHttpStartupConfig(
+        {
+          host: "0.0.0.0",
+          allowedOrigins: ["https://chatgpt.com"],
+          bearerTokenFile: "/tmp/token",
+          publicUrl: "https://mcp.example/mcp",
+        },
+        "secret",
+        {
+          toolProfile: "remote-readonly",
+          allowedHosts: ["prod"],
+          authMode: "bearer",
+          oauthConfigured: false,
+        },
+      ),
     ).not.toThrow();
+  });
+
+  test("rejects loopback public URLs for non-loopback startup", () => {
+    expect(() =>
+      validateHttpStartupConfig(
+        {
+          host: "0.0.0.0",
+          allowedOrigins: ["https://chatgpt.com"],
+          bearerTokenFile: "/tmp/token",
+          publicUrl: "https://localhost/mcp",
+        },
+        "secret",
+        {
+          toolProfile: "remote-readonly",
+          allowedHosts: ["prod"],
+          authMode: "bearer",
+          oauthConfigured: false,
+        },
+      ),
+    ).toThrow("loopback host");
   });
 
   test("rejects non-loopback startup with full tool profile", () => {
@@ -72,6 +116,7 @@ describe("HTTP transport security guards", () => {
           host: "0.0.0.0",
           allowedOrigins: ["https://chatgpt.com"],
           bearerTokenFile: "/tmp/token",
+          publicUrl: "https://mcp.example/mcp",
         },
         "secret",
         {
@@ -91,6 +136,7 @@ describe("HTTP transport security guards", () => {
           host: "0.0.0.0",
           allowedOrigins: ["https://chatgpt.com"],
           bearerTokenFile: "/tmp/token",
+          publicUrl: "https://mcp.example/mcp",
         },
         "secret",
         {
@@ -109,6 +155,7 @@ describe("HTTP transport security guards", () => {
         {
           host: "0.0.0.0",
           allowedOrigins: ["https://chatgpt.com"],
+          publicUrl: "https://mcp.example/mcp",
         },
         undefined,
         {
@@ -128,6 +175,7 @@ describe("HTTP transport security guards", () => {
           host: "0.0.0.0",
           allowedOrigins: ["https://chatgpt.com"],
           bearerTokenFile: "/tmp/token",
+          publicUrl: "https://mcp.example/mcp",
         },
         "secret",
         {

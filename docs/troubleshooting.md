@@ -34,7 +34,7 @@ GitHub should contain only `DOPPLER_TOKEN`. Required runtime secrets are listed 
 
 ## The MCP Server Does Not Appear
 
-1. Confirm Node.js is `22.22.2+` or `24.14.1+`.
+1. Confirm Node.js is `22.22.2+` or `24.15.0+`.
 2. Confirm the command works: `mcp-ssh-tool --version`.
 3. Use stdio config for local clients:
 

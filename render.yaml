@@ -5,17 +5,25 @@ services:
     plan: free
     repo: https://github.com/oaslananka-lab/mcp-ssh-tool
     branch: main
-    buildCommand: corepack enable && corepack prepare pnpm@11.0.8 --activate && pnpm install --frozen-lockfile && pnpm run build
-    startCommand: corepack enable && corepack prepare pnpm@11.0.8 --activate && pnpm run start:http
+    buildCommand: corepack enable && corepack prepare pnpm@11.0.9 --activate && pnpm install --frozen-lockfile && pnpm run build
+    startCommand: corepack enable && corepack prepare pnpm@11.0.9 --activate && pnpm run start:http
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
-        value: 24.14.1
+        value: 24.15.0
       - key: SSH_MCP_HTTP_HOST
         value: 0.0.0.0
       - key: SSH_MCP_HTTP_ALLOWED_ORIGINS
         value: https://chatgpt.com,https://chat.openai.com,https://sshautomator.oaslananka.dev,https://sshautomator.onrender.com
+      - key: SSH_MCP_HTTP_PUBLIC_URL
+        value: https://sshautomator.oaslananka.dev/mcp
+      - key: SSH_MCP_HTTP_TRUST_PROXY
+        value: "true"
+      - key: SSH_MCP_HTTP_MAX_SESSIONS
+        value: "20"
+      - key: SSH_MCP_HTTP_SESSION_IDLE_TTL_MS
+        value: "900000"
       - key: SSH_MCP_TOOL_PROFILE
         value: chatgpt
       - key: SSH_MCP_HOST_KEY_POLICY

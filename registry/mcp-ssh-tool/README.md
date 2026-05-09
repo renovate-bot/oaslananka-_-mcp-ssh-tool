@@ -2,7 +2,7 @@
 
 - **Entrypoint:** `dist/index.js`
 - **Transport:** stdio
-- **Runtime:** node (`22.22.2+` or `24.14.1+`)
+- **Runtime:** node (`22.22.2+` or `24.15.0+`)
 - **Platforms:** linux, macos, windows
 - **Command:** `mcp-ssh-tool`
 

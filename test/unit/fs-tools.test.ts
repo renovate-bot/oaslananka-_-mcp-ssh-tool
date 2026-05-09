@@ -1,4 +1,5 @@
 import { describe, expect, jest, test } from "@jest/globals";
+import { createPolicyError } from "../../src/errors.js";
 import { createFsService } from "../../src/fs-tools.js";
 import { ErrorCode } from "../../src/types.js";
 import {
@@ -243,7 +244,7 @@ describe("createFsService", () => {
           }) as any,
         getOSInfo: async () => createLinuxOSInfo(),
       },
-      config: { maxFileSize: 8 },
+      config: { ...createTestConfig(), maxFileSize: 8 },
       metrics: createFileMetrics(),
       policy: createAllowPolicy(),
     } as any);
@@ -252,6 +253,124 @@ describe("createFsService", () => {
       code: ErrorCode.ELIMIT,
     });
     expect(readFile).not.toHaveBeenCalled();
+  });
+
+  test("enforces write-size limits before buffering or writing", async () => {
+    const writeFile = jest.fn(
+      (_path: string, _data: Buffer, _opts: object, callback: (err?: Error | null) => void) =>
+        callback(null),
+    );
+    const service = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            ssh: { execCommand: jest.fn() },
+            sftp: { writeFile },
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: { ...createTestConfig(), maxFileWriteBytes: 3 },
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(service.writeFile("session-1", "/tmp/large.txt", "abcd")).rejects.toMatchObject({
+      code: ErrorCode.ELIMIT,
+    });
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  test("enforces policy before stat and list access", async () => {
+    const stat = jest.fn(
+      (_path: string, callback: (err: Error | null, stats: { mode?: number }) => void) =>
+        callback(null, { mode: 0o100644 }),
+    );
+    const readdir = jest.fn(
+      (
+        _path: string,
+        callback: (
+          err: Error | null,
+          list: Array<{ filename: string; attrs: { mode?: number } }>,
+        ) => void,
+      ) => callback(null, []),
+    );
+    const policy = {
+      assertAllowed: jest.fn((context: { action: string }) => {
+        if (context.action === "fs.stat" || context.action === "fs.list") {
+          throw createPolicyError("denied");
+        }
+        return { allowed: true, mode: "enforce", action: context.action };
+      }),
+    };
+    const service = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            ssh: { execCommand: jest.fn() },
+            sftp: { stat, readdir },
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy,
+    } as any);
+
+    await expect(service.statFile("session-1", "/etc/shadow")).rejects.toMatchObject({
+      code: ErrorCode.EPOLICY,
+    });
+    await expect(service.listDirectory("session-1", "/etc")).rejects.toMatchObject({
+      code: ErrorCode.EPOLICY,
+    });
+    expect(stat).not.toHaveBeenCalled();
+    expect(readdir).not.toHaveBeenCalled();
+  });
+
+  test("does not require fs.stat policy for read size preflight", async () => {
+    const readFile = jest.fn((_path: string, callback: (err: Error | null, data: Buffer) => void) =>
+      callback(null, Buffer.from("hello")),
+    );
+    const policy = {
+      assertAllowed: jest.fn((context: { action: string }) => {
+        if (context.action === "fs.stat") {
+          throw createPolicyError("stat denied");
+        }
+        return { allowed: true, mode: "enforce", action: context.action };
+      }),
+    };
+    const service = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            ssh: { execCommand: jest.fn() },
+            sftp: {
+              readFile,
+              stat: (
+                _path: string,
+                callback: (
+                  err: Error | null,
+                  stats: { mode?: number; size?: number; mtime?: number },
+                ) => void,
+              ) => callback(null, { mode: 0o100644, size: 5, mtime: 1700000000 }),
+            },
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy,
+    } as any);
+
+    await expect(service.readFile("session-1", "/tmp/readable.txt")).resolves.toBe("hello");
+    expect(policy.assertAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "fs.read" }),
+    );
+    expect(policy.assertAllowed).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: "fs.stat" }),
+    );
   });
 
   test("handles missing sessions and successful path helpers", async () => {
@@ -321,6 +440,8 @@ describe("createFsService", () => {
       code: "EFS",
     });
     expect(unlink).toHaveBeenCalled();
+    const tempPath = (unlink.mock.calls[0]?.[0] ?? "") as string;
+    expect(tempPath).toMatch(/^\/tmp\/\.demo\.[0-9a-f-]{36}\.tmp$/u);
   });
 
   test("uses stats helper methods and unlinks single files over SFTP", async () => {

@@ -58,7 +58,7 @@
   },
   "submission": {
     "dashboardConfigured": false,
-    "publicHttpsMcpEndpoint": null,
+    "publicHttpsMcpEndpoint": "https://sshautomator.oaslananka.dev/mcp",
     "domainVerificationConfigured": false,
     "componentCspConfigured": false,
     "privacyPolicyReviewed": false,

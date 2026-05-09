@@ -4,7 +4,6 @@ import { createFsService } from "../fs-tools.js";
 import { createProcessService } from "../process.js";
 import { createStreamingService } from "../streaming.js";
 import { createTransferService } from "../transfer.js";
-import { createTunnelService } from "../tunnel.js";
 import { ConnectorToolProvider } from "./connector.provider.js";
 import { EnsureToolProvider } from "./ensure.provider.js";
 import { FsToolProvider } from "./fs.provider.js";
@@ -43,12 +42,6 @@ export function createToolRegistry(container: AppContainer): ToolRegistry {
     policy: container.policy,
     config: container.config.getAll(),
   });
-  const tunnelService = createTunnelService({
-    sessionManager: container.sessionManager,
-    metrics: container.metrics,
-    policy: container.policy,
-  });
-
   return new ToolRegistry(container.config.get("connector").toolProfile)
     .register(
       new ConnectorToolProvider({
@@ -80,5 +73,5 @@ export function createToolRegistry(container: AppContainer): ToolRegistry {
       }),
     )
     .register(new TransferToolProvider({ transferService }))
-    .register(new TunnelToolProvider({ tunnelService }));
+    .register(new TunnelToolProvider({ tunnelService: container.tunnelService }));
 }

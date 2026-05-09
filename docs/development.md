@@ -9,7 +9,7 @@ pnpm install --frozen-lockfile
 pnpm run prepare
 ```
 
-On Windows, `corepack enable` may require elevated permissions because it writes shims under the Node.js installation directory. If it fails with `EPERM`, continue with the repo-pinned pnpm activated by `corepack prepare pnpm@11.0.8 --activate`.
+On Windows, `corepack enable` may require elevated permissions because it writes shims under the Node.js installation directory. If it fails with `EPERM`, continue with the repo-pinned pnpm activated by `corepack prepare pnpm@11.0.9 --activate`.
 
 ## Local Gates
 

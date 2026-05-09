@@ -45,7 +45,10 @@ mcp-ssh-tool \
   --bearer-token-file /run/secrets/mcp-ssh-token
 ```
 
-If bound beyond loopback, also set `SSH_MCP_HTTP_ALLOWED_ORIGINS` and terminate TLS/auth at a reverse proxy.
+If bound beyond loopback, also set `SSH_MCP_HTTP_ALLOWED_ORIGINS`,
+`SSH_MCP_HTTP_PUBLIC_URL`, `SSH_MCP_ALLOWED_HOSTS`, and bearer or OAuth
+authentication. Set `SSH_MCP_HTTP_TRUST_PROXY=true` only behind a trusted reverse
+proxy that controls `X-Forwarded-*` headers.
 
 ## Release Controls
 

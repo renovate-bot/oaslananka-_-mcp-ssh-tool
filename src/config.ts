@@ -27,6 +27,8 @@ export interface ServerConfig {
   maxStreamChunks: number;
   /** Maximum file size for read operations (bytes) */
   maxFileSize: number;
+  /** Maximum file write payload size accepted before buffering (bytes) */
+  maxFileWriteBytes: number;
   /** Maximum file transfer size (bytes) */
   maxTransferBytes: number;
   /** Enable debug logging */
@@ -54,6 +56,10 @@ export interface ServerConfig {
     bearerTokenFile?: string;
     enableLegacySse: boolean;
     maxRequestBodyBytes: number;
+    maxSessions: number;
+    sessionIdleTtlMs: number;
+    publicUrl?: string;
+    trustProxy: boolean;
   };
   /** Remote ChatGPT/Claude connector settings */
   connector: {
@@ -83,6 +89,7 @@ export const DEFAULT_CONFIG: ServerConfig = {
   maxCommandOutputBytes: 1024 * 1024, // 1MB
   maxStreamChunks: 4096,
   maxFileSize: 10 * 1024 * 1024, // 10MB
+  maxFileWriteBytes: 10 * 1024 * 1024, // 10MB
   maxTransferBytes: 50 * 1024 * 1024, // 50MB
   debug: false,
   rateLimit: {
@@ -109,6 +116,12 @@ export const DEFAULT_CONFIG: ServerConfig = {
     pathDenyPrefixes: ["/etc/sudoers", "/etc/shadow", "/etc/passwd", "/boot", "/dev", "/proc"],
     localPathAllowPrefixes: [os.tmpdir()],
     localPathDenyPrefixes: [],
+    tunnelAllowBindHosts: ["127.0.0.1", "localhost", "::1"],
+    tunnelDenyBindHosts: ["0.0.0.0", "::"],
+    tunnelAllowRemoteHosts: [],
+    tunnelDenyRemoteHosts: [],
+    tunnelAllowPorts: [],
+    tunnelDenyPorts: [],
   },
   http: {
     host: "127.0.0.1",
@@ -116,6 +129,9 @@ export const DEFAULT_CONFIG: ServerConfig = {
     allowedOrigins: ["http://127.0.0.1", "http://localhost"],
     enableLegacySse: false,
     maxRequestBodyBytes: 1024 * 1024,
+    maxSessions: 20,
+    sessionIdleTtlMs: 900_000,
+    trustProxy: false,
   },
   connector: {
     toolProfile: "full",
@@ -240,6 +256,10 @@ export class ConfigManager {
       config.maxStreamChunks,
     );
     config.maxFileSize = parseInteger(process.env.SSH_MCP_MAX_FILE_SIZE, config.maxFileSize);
+    config.maxFileWriteBytes = parseInteger(
+      process.env.SSH_MCP_MAX_FILE_WRITE_BYTES,
+      config.maxFileWriteBytes,
+    );
     config.maxTransferBytes = parseInteger(
       process.env.SSH_MCP_MAX_TRANSFER_BYTES,
       config.maxTransferBytes,
@@ -321,11 +341,30 @@ export class ConfigManager {
       localPathDenyPrefixes: parseList(process.env.SSH_MCP_LOCAL_PATH_DENY_PREFIXES).length
         ? parseList(process.env.SSH_MCP_LOCAL_PATH_DENY_PREFIXES)
         : (filePolicy.localPathDenyPrefixes ?? config.policy.localPathDenyPrefixes),
+      tunnelAllowBindHosts: parseList(process.env.SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS).length
+        ? parseList(process.env.SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS)
+        : (filePolicy.tunnelAllowBindHosts ?? config.policy.tunnelAllowBindHosts),
+      tunnelDenyBindHosts: parseList(process.env.SSH_MCP_TUNNEL_DENY_BIND_HOSTS).length
+        ? parseList(process.env.SSH_MCP_TUNNEL_DENY_BIND_HOSTS)
+        : (filePolicy.tunnelDenyBindHosts ?? config.policy.tunnelDenyBindHosts),
+      tunnelAllowRemoteHosts: parseList(process.env.SSH_MCP_TUNNEL_ALLOW_REMOTE_HOSTS).length
+        ? parseList(process.env.SSH_MCP_TUNNEL_ALLOW_REMOTE_HOSTS)
+        : (filePolicy.tunnelAllowRemoteHosts ?? config.policy.tunnelAllowRemoteHosts),
+      tunnelDenyRemoteHosts: parseList(process.env.SSH_MCP_TUNNEL_DENY_REMOTE_HOSTS).length
+        ? parseList(process.env.SSH_MCP_TUNNEL_DENY_REMOTE_HOSTS)
+        : (filePolicy.tunnelDenyRemoteHosts ?? config.policy.tunnelDenyRemoteHosts),
+      tunnelAllowPorts: parseList(process.env.SSH_MCP_TUNNEL_ALLOW_PORTS).length
+        ? parseList(process.env.SSH_MCP_TUNNEL_ALLOW_PORTS)
+        : (filePolicy.tunnelAllowPorts ?? config.policy.tunnelAllowPorts),
+      tunnelDenyPorts: parseList(process.env.SSH_MCP_TUNNEL_DENY_PORTS).length
+        ? parseList(process.env.SSH_MCP_TUNNEL_DENY_PORTS)
+        : (filePolicy.tunnelDenyPorts ?? config.policy.tunnelDenyPorts),
     };
     config.policy.allowRootLogin = config.security.allowRootLogin;
 
     const bearerTokenFile =
       process.env.SSH_MCP_HTTP_BEARER_TOKEN_FILE ?? config.http.bearerTokenFile;
+    const publicUrl = process.env.SSH_MCP_HTTP_PUBLIC_URL ?? config.http.publicUrl;
     config.http = {
       ...config.http,
       host: process.env.SSH_MCP_HTTP_HOST ?? config.http.host,
@@ -342,6 +381,13 @@ export class ConfigManager {
         process.env.SSH_MCP_HTTP_MAX_REQUEST_BODY_BYTES,
         config.http.maxRequestBodyBytes,
       ),
+      maxSessions: parseInteger(process.env.SSH_MCP_HTTP_MAX_SESSIONS, config.http.maxSessions),
+      sessionIdleTtlMs: parseInteger(
+        process.env.SSH_MCP_HTTP_SESSION_IDLE_TTL_MS,
+        config.http.sessionIdleTtlMs,
+      ),
+      trustProxy: parseBoolean(process.env.SSH_MCP_HTTP_TRUST_PROXY, config.http.trustProxy),
+      ...(publicUrl ? { publicUrl } : {}),
     };
 
     const connectorCredentialCommand =
@@ -408,6 +454,24 @@ export class ConfigManager {
       localPathDenyPrefixes: overrides.policy?.localPathDenyPrefixes ?? [
         ...(config.policy.localPathDenyPrefixes ?? []),
       ],
+      tunnelAllowBindHosts: overrides.policy?.tunnelAllowBindHosts ?? [
+        ...(config.policy.tunnelAllowBindHosts ?? []),
+      ],
+      tunnelDenyBindHosts: overrides.policy?.tunnelDenyBindHosts ?? [
+        ...(config.policy.tunnelDenyBindHosts ?? []),
+      ],
+      tunnelAllowRemoteHosts: overrides.policy?.tunnelAllowRemoteHosts ?? [
+        ...(config.policy.tunnelAllowRemoteHosts ?? []),
+      ],
+      tunnelDenyRemoteHosts: overrides.policy?.tunnelDenyRemoteHosts ?? [
+        ...(config.policy.tunnelDenyRemoteHosts ?? []),
+      ],
+      tunnelAllowPorts: overrides.policy?.tunnelAllowPorts ?? [
+        ...(config.policy.tunnelAllowPorts ?? []),
+      ],
+      tunnelDenyPorts: overrides.policy?.tunnelDenyPorts ?? [
+        ...(config.policy.tunnelDenyPorts ?? []),
+      ],
     };
 
     return {
@@ -468,6 +532,12 @@ export class ConfigManager {
         pathDenyPrefixes: [...this.config.policy.pathDenyPrefixes],
         localPathAllowPrefixes: [...(this.config.policy.localPathAllowPrefixes ?? [])],
         localPathDenyPrefixes: [...(this.config.policy.localPathDenyPrefixes ?? [])],
+        tunnelAllowBindHosts: [...(this.config.policy.tunnelAllowBindHosts ?? [])],
+        tunnelDenyBindHosts: [...(this.config.policy.tunnelDenyBindHosts ?? [])],
+        tunnelAllowRemoteHosts: [...(this.config.policy.tunnelAllowRemoteHosts ?? [])],
+        tunnelDenyRemoteHosts: [...(this.config.policy.tunnelDenyRemoteHosts ?? [])],
+        tunnelAllowPorts: [...(this.config.policy.tunnelAllowPorts ?? [])],
+        tunnelDenyPorts: [...(this.config.policy.tunnelDenyPorts ?? [])],
       }),
       http: Object.freeze({
         ...this.config.http,
@@ -511,6 +581,24 @@ export class ConfigManager {
       ],
       localPathDenyPrefixes: updates.policy?.localPathDenyPrefixes ?? [
         ...(this.config.policy.localPathDenyPrefixes ?? []),
+      ],
+      tunnelAllowBindHosts: updates.policy?.tunnelAllowBindHosts ?? [
+        ...(this.config.policy.tunnelAllowBindHosts ?? []),
+      ],
+      tunnelDenyBindHosts: updates.policy?.tunnelDenyBindHosts ?? [
+        ...(this.config.policy.tunnelDenyBindHosts ?? []),
+      ],
+      tunnelAllowRemoteHosts: updates.policy?.tunnelAllowRemoteHosts ?? [
+        ...(this.config.policy.tunnelAllowRemoteHosts ?? []),
+      ],
+      tunnelDenyRemoteHosts: updates.policy?.tunnelDenyRemoteHosts ?? [
+        ...(this.config.policy.tunnelDenyRemoteHosts ?? []),
+      ],
+      tunnelAllowPorts: updates.policy?.tunnelAllowPorts ?? [
+        ...(this.config.policy.tunnelAllowPorts ?? []),
+      ],
+      tunnelDenyPorts: updates.policy?.tunnelDenyPorts ?? [
+        ...(this.config.policy.tunnelDenyPorts ?? []),
       ],
     };
 

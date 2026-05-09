@@ -42,7 +42,7 @@
     "redactionRequired": true
   },
   "submission": {
-    "publicHttpsMcpEndpoint": null,
+    "publicHttpsMcpEndpoint": "https://sshautomator.oaslananka.dev/mcp",
     "oauthConfigured": false,
     "allowedOriginsConfigured": false,
     "privacyPolicyReviewed": false,

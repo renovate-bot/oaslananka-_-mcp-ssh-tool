@@ -36,6 +36,8 @@ export interface SSHSession {
   osInfo?: OSInfo;
 }
 
+export type SessionCloseListener = (sessionId: string) => void | Promise<void>;
+
 interface SSHAuthConfig {
   password?: string;
   privateKey?: string;
@@ -89,6 +91,7 @@ export class SessionManager {
   private readonly defaultTtlMs: number;
   private cleanupInterval: NodeJS.Timeout | undefined;
   private readonly acceptedHostKeys = new Map<string, string>();
+  private readonly closeListeners = new Set<SessionCloseListener>();
 
   constructor(
     maxSessions = 20,
@@ -120,6 +123,13 @@ export class SessionManager {
       this.cleanupInterval = undefined;
     }
     await this.closeAllSessions();
+  }
+
+  onSessionClose(listener: SessionCloseListener): () => void {
+    this.closeListeners.add(listener);
+    return () => {
+      this.closeListeners.delete(listener);
+    };
   }
 
   /**
@@ -347,6 +357,7 @@ export class SessionManager {
     }
 
     try {
+      await this.notifySessionClose(sessionId);
       if (session.sftp) {
         session.sftp.end();
       }
@@ -494,7 +505,7 @@ export class SessionManager {
     const homeDir = os.homedir();
     const keyDir = process.env.SSH_DEFAULT_KEY_DIR ?? path.join(homeDir, ".ssh");
 
-    const keyFiles = ["id_ed25519", "id_rsa", "id_ecdsa"];
+    const keyFiles = ["id_ed25519", "id_ecdsa", "id_ed25519_sk", "id_ecdsa_sk", "id_rsa"];
 
     for (const keyFile of keyFiles) {
       const keyPath = path.join(keyDir, keyFile);
@@ -519,6 +530,38 @@ export class SessionManager {
    */
   private generateSessionId(): string {
     return `ssh-${randomUUID()}`;
+  }
+
+  private async notifySessionClose(sessionId: string): Promise<void> {
+    const listenerTimeoutMs = 5_000;
+    const runListener = async (listener: SessionCloseListener): Promise<void> => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.resolve().then(() => listener(sessionId)),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error("Session close listener timed out")),
+              listenerTimeoutMs,
+            );
+          }),
+        ]);
+      } finally {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+      }
+    };
+
+    const results = await Promise.allSettled(
+      Array.from(this.closeListeners).map((listener) => runListener(listener)),
+    );
+
+    for (const result of results) {
+      if (result.status === "rejected") {
+        logger.warn("Session close listener failed", { sessionId, error: result.reason });
+      }
+    }
   }
 
   private resolveHostKeyPolicy(params: ConnectionParams): HostKeyPolicy {
