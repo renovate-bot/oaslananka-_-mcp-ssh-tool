@@ -37,7 +37,12 @@ function printHelp() {
     "",
     "Usage:",
     "  mcp-ssh-tool             Start MCP server over stdio (default)",
+    "  mcp-ssh-tool stdio       Start MCP server over stdio",
+    "  mcp-ssh-tool http        Start Streamable HTTP server",
     "  mcp-ssh-tool --transport=http Start Streamable HTTP server",
+    "  mcp-ssh-tool agent enroll --server <url> --token <token> --alias <alias>",
+    "  mcp-ssh-tool agent run   Run the no-custody outbound agent",
+    "  mcp-ssh-tool agent status Show local agent enrollment status",
     "  mcp-ssh-tool --help      Show this help",
     "  mcp-ssh-tool --version   Show version",
     "  mcp-ssh-tool --stdio     Force stdio mode (default)",
@@ -72,6 +77,7 @@ interface CliOptions {
   enableLegacySse: boolean;
   toolProfile?: string;
   connectorCredentialProvider?: string;
+  agentArgs?: string[];
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -86,6 +92,16 @@ function parseArgs(argv: string[]): CliOptions {
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     switch (arg) {
+      case "agent":
+        opts.agentArgs = argv.slice(index + 1);
+        index = argv.length;
+        break;
+      case "http":
+        opts.transport = "http";
+        break;
+      case "stdio":
+        opts.transport = "stdio";
+        break;
       case "--help":
       case "-h":
         opts.help = true;
@@ -179,6 +195,12 @@ async function main() {
   if (opts.version) {
     printVersion();
     process.exit(0);
+  }
+
+  if (opts.agentArgs) {
+    const { runAgentCli } = await import("./remote/agent-cli.js");
+    await runAgentCli(opts.agentArgs);
+    return;
   }
 
   if (opts.transport === "http") {

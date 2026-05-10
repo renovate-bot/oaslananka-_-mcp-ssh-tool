@@ -30,6 +30,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json -w",
+    "dev:control-plane": "pnpm run build && node scripts/dev-control-plane.mjs",
+    "dev:agent": "pnpm run build && node scripts/dev-agent.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=unit --runInBand",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage --testPathPatterns=unit --runInBand",
@@ -153,7 +155,15 @@
       "!src/**/*.d.ts",
       "!src/index.ts",
       "!src/server-http.ts",
-      "!src/render-http.ts"
+      "!src/render-http.ts",
+      "!src/remote/agent-executor.ts",
+      "!src/remote/agent-cli.ts",
+      "!src/remote/config.ts",
+      "!src/remote/control-plane.ts",
+      "!src/remote/mcp-tools.ts",
+      "!src/remote/store.ts",
+      "!src/remote/util.ts",
+      "!src/remote/websocket.ts"
     ],
     "coverageDirectory": "coverage",
     "coverageReporters": [

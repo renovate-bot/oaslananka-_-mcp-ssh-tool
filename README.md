@@ -69,6 +69,28 @@ Open a safe SSH session to prod-1 as deploy, inspect host capabilities, then sho
 
 Non-loopback HTTP startup is refused unless `--bearer-token-file`, allowed origins, and `SSH_MCP_HTTP_PUBLIC_URL` are configured.
 
+## No-Custody Remote Agent Mode
+
+For public ChatGPT connector deployments, enable the remote-agent control plane instead of asking users for SSH credentials:
+
+```bash
+SSHAUTOMATOR_REMOTE_AGENT_CONTROL_PLANE=true \
+PUBLIC_BASE_URL=https://sshautomator.example.com \
+MCP_RESOURCE_URL=https://sshautomator.example.com/mcp \
+mcp-ssh-tool http --host 0.0.0.0 --port 3000
+```
+
+Remote mode adds OAuth/DCR endpoints, a protected `/mcp` endpoint, agent enrollment APIs, and outbound WebSocket agent connections. ChatGPT receives OAuth-scoped MCP access. The platform stores identity, policy, audit records, OAuth metadata, hashed one-time tokens, and agent public keys; it does not store user SSH private keys, SSH passwords, root passwords, or cloud login credentials.
+
+Enroll an agent on the user's own host:
+
+```bash
+npx mcp-ssh-tool agent enroll --server https://sshautomator.example.com --token <one-time-token> --alias prod-1
+npx mcp-ssh-tool agent run
+```
+
+The agent verifies signed control-plane action envelopes, enforces local policy, executes bounded actions, signs results, and returns them over the outbound connection. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CHATGPT_CONNECTOR.md](docs/CHATGPT_CONNECTOR.md), and [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md).
+
 ## Secure Defaults
 
 | Area | v2 Default |
@@ -257,6 +279,12 @@ See [docs/ci-cd-topology.md](docs/ci-cd-topology.md) for mirror, release, dry-ru
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/SECURITY.md](docs/SECURITY.md)
+- [docs/CHATGPT_CONNECTOR.md](docs/CHATGPT_CONNECTOR.md)
+- [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md)
+- [docs/MIGRATION.md](docs/MIGRATION.md)
+- [docs/API.md](docs/API.md)
 - [SECURITY_DECISIONS.md](SECURITY_DECISIONS.md)
 - [MIGRATION.md](MIGRATION.md)
 - [docs/ci-cd-topology.md](docs/ci-cd-topology.md)

@@ -8,6 +8,7 @@ coverage/
 test-results/
 artifacts/
 .cache/
+data/
 
 # Environment variables
 .env

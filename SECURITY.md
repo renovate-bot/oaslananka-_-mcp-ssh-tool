@@ -43,6 +43,13 @@ This tool operates over SSH and handles credentials. The following are
 - Rate limiter bypass allowing brute-force attacks
 - Prototype pollution via JSON input parsing
 
+Remote connector mode is a no-custody architecture. Users do not submit SSH
+private keys, SSH passwords, root passwords, or cloud credentials to the hosted
+control plane. Remote execution happens through an enrolled outbound agent that
+keeps its private key locally, verifies signed control-plane action envelopes,
+enforces local policy, and signs action results. See
+[docs/SECURITY.md](docs/SECURITY.md) for the remote-agent threat model.
+
 ### Out of Scope
 
 - Vulnerabilities in third-party dependencies (report to their respective projects)

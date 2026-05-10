@@ -20,6 +20,9 @@ import {
   oauthWwwAuthenticateHeader,
   validateHttpStartupConfig,
 } from "./http-security.js";
+import { createRemoteControlPlane } from "./remote/control-plane.js";
+import { loadRemoteConfig } from "./remote/config.js";
+import { userSafeError } from "./remote/util.js";
 
 type HttpTransport = StreamableHTTPServerTransport | SSEServerTransport;
 
@@ -39,6 +42,8 @@ const httpConfig = container.config.get("http");
 const authConfig = container.config.get("auth");
 const connectorConfig = container.config.get("connector");
 const policyConfig = container.config.get("policy");
+const remoteConfig = loadRemoteConfig();
+const remoteControlPlanePromise = remoteConfig.enabled ? createRemoteControlPlane() : undefined;
 const sessions = new Map<string, HttpSession>();
 const bearerToken = httpConfig.bearerTokenFile
   ? readFileSync(httpConfig.bearerTokenFile, "utf8").trim()
@@ -354,18 +359,28 @@ async function handleLegacyMessage(req: IncomingMessage, res: ServerResponse): P
   await session.transport.handlePostMessage(req, res);
 }
 
-validateHttpStartupConfig(httpConfig, bearerToken, {
-  toolProfile: connectorConfig.toolProfile,
-  allowedHosts: policyConfig.allowedHosts,
-  hostKeyPolicy: container.config.get("security").hostKeyPolicy,
-  authMode: authConfig.mode,
-  oauthConfigured: Boolean(authConfig.oauthIssuer && authConfig.oauthJwksUrl),
-});
+if (!remoteConfig.enabled) {
+  validateHttpStartupConfig(httpConfig, bearerToken, {
+    toolProfile: connectorConfig.toolProfile,
+    allowedHosts: policyConfig.allowedHosts,
+    hostKeyPolicy: container.config.get("security").hostKeyPolicy,
+    authMode: authConfig.mode,
+    oauthConfigured: Boolean(authConfig.oauthIssuer && authConfig.oauthJwksUrl),
+  });
+}
 
 const httpServer = createServer((req, res) => {
   void (async () => {
     try {
       const requestUrl = new URL(req.url ?? endpoint, "http://localhost");
+
+      if (remoteControlPlanePromise) {
+        const remoteControlPlane = await remoteControlPlanePromise;
+        const handled = await remoteControlPlane.handleHttp(req, res, requestUrl.pathname);
+        if (handled) {
+          return;
+        }
+      }
 
       if (requestUrl.pathname === oauthProtectedResourceEndpoint && req.method === "GET") {
         sendJson(req, res, 200, protectedResourceMetadata(req));
@@ -427,16 +442,40 @@ const httpServer = createServer((req, res) => {
       sendJson(req, res, 404, { error: "Not found" });
     } catch (error) {
       logger.error("HTTP MCP request failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: userSafeError(error),
       });
       if (!res.headersSent) {
-        const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
-        const message =
-          error instanceof RequestBodyTooLargeError
-            ? "Request body is too large"
-            : "Internal server error";
-        sendJson(req, res, statusCode, { error: message });
+        if (error && typeof error === "object" && "status" in error && "message" in error) {
+          const status = Number((error as { status: number }).status);
+          const message = String((error as { message: string }).message);
+          const code = "code" in error ? String((error as { code: string }).code) : undefined;
+          sendJson(req, res, Number.isFinite(status) ? status : 500, { error: message, code });
+        } else {
+          const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 500;
+          const message =
+            error instanceof RequestBodyTooLargeError
+              ? "Request body is too large"
+              : "Internal server error";
+          sendJson(req, res, statusCode, { error: message });
+        }
       }
+    }
+  })();
+});
+
+httpServer.on("upgrade", (req, socket, head) => {
+  void (async () => {
+    try {
+      const requestUrl = new URL(req.url ?? "/", "http://localhost");
+      if (remoteControlPlanePromise) {
+        const remoteControlPlane = await remoteControlPlanePromise;
+        if (remoteControlPlane.handleUpgrade(req, socket, head, requestUrl.pathname)) {
+          return;
+        }
+      }
+      socket.destroy();
+    } catch {
+      socket.destroy();
     }
   })();
 });
@@ -466,6 +505,10 @@ async function shutdown(signal: string) {
 
   container.rateLimiter.destroy();
   await container.sessionManager.destroy();
+  if (remoteControlPlanePromise) {
+    const remoteControlPlane = await remoteControlPlanePromise;
+    remoteControlPlane.close();
+  }
   await shutdownTelemetry();
   process.exit(0);
 }
