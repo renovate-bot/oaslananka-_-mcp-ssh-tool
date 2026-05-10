@@ -39,8 +39,14 @@ services:
       - key: SSH_MCP_ALLOW_DESTRUCTIVE_FS
         value: "false"
       - key: SSH_MCP_HTTP_AUTH_MODE
-        value: bearer
-      - key: SSH_MCP_HTTP_BEARER_TOKEN
-        sync: false
+        value: oauth
+      - key: SSH_MCP_OAUTH_ISSUER
+        value: https://dev-d4obxio3he6t4bo8.us.auth0.com/
+      - key: SSH_MCP_OAUTH_JWKS_URL
+        value: https://dev-d4obxio3he6t4bo8.us.auth0.com/.well-known/jwks.json
+      - key: SSH_MCP_OAUTH_AUDIENCE
+        value: https://sshautomator.oaslananka.dev/mcp
+      - key: SSH_MCP_OAUTH_REQUIRED_SCOPES
+        value: mcp-ssh-tool.read
       - key: SSH_MCP_ALLOWED_HOSTS
         sync: false
