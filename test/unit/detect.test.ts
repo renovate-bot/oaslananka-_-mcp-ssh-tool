@@ -111,6 +111,128 @@ describe("detectOS", () => {
     );
   });
 
+  test("detects Linux lsb-release, service init, and fallback shell", async () => {
+    const ssh = createSSH({
+      "uname -m": { code: 0, stdout: "aarch64\n" },
+      "uname -s": { code: 0, stdout: "Linux\n" },
+      "echo $SHELL": { code: 0, stdout: "/bin/sh\n" },
+      "cat /etc/os-release": { code: 1, stdout: "" },
+      "cat /etc/lsb-release": {
+        code: 0,
+        stdout: "DISTRIB_ID=Ubuntu\nDISTRIB_RELEASE=24.04\n",
+      },
+      "command -v apt-get || which apt-get": { code: 1, stdout: "" },
+      "command -v dnf || which dnf": { code: 1, stdout: "" },
+      "command -v yum || which yum": { code: 1, stdout: "" },
+      "command -v pacman || which pacman": { code: 1, stdout: "" },
+      "command -v apk || which apk": { code: 0, stdout: "/sbin/apk\n" },
+      "command -v systemctl || which systemctl": { code: 1, stdout: "" },
+      "command -v service || which service": { code: 0, stdout: "/usr/sbin/service\n" },
+    });
+
+    await expect(detectOS(ssh)).resolves.toEqual(
+      expect.objectContaining({
+        platform: "linux",
+        distro: "ubuntu",
+        version: "24.04",
+        packageManager: "apk",
+        init: "service",
+        defaultShell: "sh",
+      }),
+    );
+  });
+
+  test("detects Red Hat and Debian fallback release files", async () => {
+    const redHat = createSSH({
+      "uname -m": { code: 0, stdout: "x86_64\n" },
+      "uname -s": { code: 0, stdout: "Linux\n" },
+      "echo $SHELL": { code: 0, stdout: "/bin/bash\n" },
+      "cat /etc/os-release": { code: 1, stdout: "" },
+      "cat /etc/lsb-release": { code: 1, stdout: "" },
+      "cat /etc/redhat-release": { code: 0, stdout: "Red Hat Enterprise Linux 9.4\n" },
+      "command -v apt-get || which apt-get": { code: 1, stdout: "" },
+      "command -v dnf || which dnf": { code: 0, stdout: "/usr/bin/dnf\n" },
+      "command -v systemctl || which systemctl": { code: 1, stdout: "" },
+      "command -v service || which service": { code: 1, stdout: "" },
+    });
+    const debian = createSSH({
+      "uname -m": { code: 0, stdout: "x86_64\n" },
+      "uname -s": { code: 0, stdout: "Linux\n" },
+      "echo $SHELL": { code: 0, stdout: "/bin/bash\n" },
+      "cat /etc/os-release": { code: 1, stdout: "" },
+      "cat /etc/lsb-release": { code: 1, stdout: "" },
+      "cat /etc/redhat-release": { code: 1, stdout: "" },
+      "cat /etc/debian_version": { code: 0, stdout: "debian 12.5\n" },
+      "command -v apt-get || which apt-get": { code: 1, stdout: "" },
+      "command -v dnf || which dnf": { code: 1, stdout: "" },
+      "command -v yum || which yum": { code: 1, stdout: "" },
+      "command -v pacman || which pacman": { code: 0, stdout: "/usr/bin/pacman\n" },
+      "command -v systemctl || which systemctl": { code: 1, stdout: "" },
+      "command -v service || which service": { code: 1, stdout: "" },
+    });
+
+    await expect(detectOS(redHat)).resolves.toEqual(
+      expect.objectContaining({
+        distro: "rhel",
+        version: "9.4",
+        packageManager: "dnf",
+      }),
+    );
+    await expect(detectOS(debian)).resolves.toEqual(
+      expect.objectContaining({
+        distro: "debian",
+        version: "debian 12.5",
+        packageManager: "pacman",
+      }),
+    );
+  });
+
+  test("detects macOS via fallback and Windows with Chocolatey", async () => {
+    const mac = createSSH({
+      "uname -m": { code: 0, stdout: "arm64\n" },
+      "uname -s": { code: 1, stdout: "" },
+      "cmd /c ver": { code: 1, stdout: "" },
+      "sw_vers -productName": { code: 0, stdout: "Mac OS X\n" },
+      "echo $SHELL": { code: 0, stdout: "/bin/bash\n" },
+      "sw_vers -productVersion": { code: 0, stdout: "" },
+      "command -v brew || which brew": { code: 1, stdout: "" },
+    });
+    const windows = createSSH({
+      "uname -m": { code: 0, stdout: "" },
+      'powershell -NoLogo -NoProfile -Command "$env:PROCESSOR_ARCHITECTURE"': {
+        code: 0,
+        stdout: "",
+      },
+      "uname -s": { code: 0, stdout: "Windows_NT\n" },
+      "echo $env:SHELL": { code: 0, stdout: "pwsh\n" },
+      'powershell -NoLogo -NoProfile -Command "$env:TEMP"': { code: 0, stdout: "" },
+      'powershell -NoLogo -NoProfile -Command "Get-Command winget -ErrorAction SilentlyContinue"': {
+        code: 1,
+        stdout: "",
+      },
+      "choco -v": { code: 0, stdout: "2.0.0\n" },
+    });
+
+    await expect(detectOS(mac)).resolves.toEqual(
+      expect.objectContaining({
+        platform: "darwin",
+        distro: "Mac OS X",
+        version: "unknown",
+        packageManager: "unknown",
+        defaultShell: "bash",
+      }),
+    );
+    await expect(detectOS(windows)).resolves.toEqual(
+      expect.objectContaining({
+        platform: "windows",
+        arch: "unknown",
+        shell: "pwsh",
+        packageManager: "choco",
+        tempDir: "C:/Windows/Temp",
+      }),
+    );
+  });
+
   test("falls back safely when commands fail", async () => {
     const ssh = createSSH({
       "uname -m": new Error("boom"),

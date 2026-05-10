@@ -261,6 +261,134 @@ describe("PolicyEngine", () => {
     ).toThrow("port 2375 is denied");
   });
 
+  test("covers allow-list, unsafe-command, and secondary path decisions", () => {
+    const engine = policy({
+      allowRootLogin: true,
+      allowRawSudo: true,
+      allowDestructiveCommands: true,
+      commandAllow: ["^systemctl status", "whoami", "^rm -rf /tmp/cache$"],
+      commandDeny: ["^reboot$"],
+      pathDenyPrefixes: ["/secret"],
+    });
+
+    expect(
+      engine.assertAllowed({
+        action: "ssh.open",
+        host: "prod.example",
+        username: "root",
+      }),
+    ).toEqual(expect.objectContaining({ allowed: true }));
+    expect(
+      engine.assertAllowed({
+        action: "proc.sudo",
+        command: "rm -rf /tmp/cache",
+        rawSudo: true,
+      }),
+    ).toEqual(expect.objectContaining({ allowed: true }));
+    expect(() =>
+      engine.assertAllowed({
+        action: "proc.exec",
+        command: "cat /etc/passwd",
+      }),
+    ).toThrow("does not match commandAllow");
+    expect(() =>
+      engine.assertAllowed({
+        action: "proc.exec",
+        command: "reboot",
+      }),
+    ).toThrow("matched commandDeny");
+    expect(() =>
+      engine.assertAllowed({
+        action: "fs.rename",
+        path: "/tmp/a",
+        secondaryPath: "/secret/b",
+      }),
+    ).toThrow("denied by policy");
+  });
+
+  test("denies malformed and unscoped local transfer paths fail-closed", () => {
+    const noLocalPrefixes = policy({
+      localPathAllowPrefixes: [],
+      localPathDenyPrefixes: [],
+    });
+
+    expect(() =>
+      noLocalPrefixes.assertAllowed({
+        action: "transfer.local.read",
+        path: "/tmp/file.txt",
+      }),
+    ).toThrow("no allowed prefixes");
+
+    const engine = policy({
+      localPathAllowPrefixes: ["/tmp"],
+      localPathDenyPrefixes: [],
+    });
+    expect(() =>
+      engine.assertAllowed({
+        action: "transfer.local.write",
+        path: "bad\0path",
+      }),
+    ).toThrow("NUL");
+  });
+
+  test("covers tunnel allow-list denials and ignored invalid port policies", () => {
+    const engine = policy({
+      tunnelAllowBindHosts: ["127.0.0.1"],
+      tunnelDenyBindHosts: [],
+      tunnelAllowRemoteHosts: ["db.internal"],
+      tunnelDenyRemoteHosts: [],
+      tunnelAllowPorts: ["not-a-port", "1000-2000"],
+      tunnelDenyPorts: ["99999", "3000"],
+    });
+
+    expect(() =>
+      engine.assertAllowed({
+        action: "tunnel.remote",
+        localBindHost: "localhost",
+        localPort: 1500,
+        remoteHost: "db.internal",
+        remotePort: 1501,
+      }),
+    ).toThrow("bind host localhost is outside allowed policy");
+    expect(() =>
+      engine.assertAllowed({
+        action: "tunnel.remote",
+        localBindHost: "127.0.0.1",
+        localPort: 1500,
+        remoteHost: "cache.internal",
+        remotePort: 1501,
+      }),
+    ).toThrow("remote host cache.internal is outside allowed policy");
+    expect(
+      engine.assertAllowed({
+        action: "tunnel.remote",
+        localBindHost: "127.0.0.1",
+        localPort: 1500,
+        remoteHost: "db.internal",
+        remotePort: 1501,
+      }),
+    ).toEqual(expect.objectContaining({ allowed: true }));
+  });
+
+  test("uses default destructive prefixes when no custom remote prefixes are configured", () => {
+    const engine = policy({ pathAllowPrefixes: [], pathDenyPrefixes: [] });
+
+    expect(
+      engine.assertAllowed({
+        action: "fs.remove",
+        path: "/home/deploy/cache",
+        destructive: true,
+      }),
+    ).toEqual(expect.objectContaining({ allowed: true }));
+    expect(() =>
+      engine.assertAllowed({
+        action: "fs.remove",
+        path: "/srv/app",
+        destructive: true,
+      }),
+    ).toThrow("outside allowed prefixes");
+  });
+
   test("explain mode returns policy verdicts without throwing", () => {
     const observer = jest.fn();
     const engine = new PolicyEngine(policy().getEffectivePolicy(), observer);

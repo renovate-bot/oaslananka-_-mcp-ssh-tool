@@ -472,6 +472,102 @@ describe("createTransferService", () => {
     ).rejects.toThrow("Session not found or expired");
   });
 
+  test("returns dry-run transfer results in explain mode without local or SFTP IO", async () => {
+    const readFile = jest.fn();
+    const writeFile = jest.fn();
+    const policy = {
+      assertAllowed: jest.fn((context: { action: string }) => ({
+        allowed: true,
+        mode:
+          context.action === "transfer.upload" || context.action === "transfer.download"
+            ? "explain"
+            : "enforce",
+        action: context.action,
+      })),
+    };
+    const service = createTransferService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo({ policyMode: "explain" }),
+            sftp: { readFile, writeFile },
+          }) as any,
+      },
+      metrics: createTransferMetrics(),
+      policy: policy as any,
+      config: createTestConfig(),
+    });
+
+    await expect(
+      service.uploadFileWithProgress("local.txt", "/tmp/remote.txt", {
+        sessionId: "session-1",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        success: true,
+        filename: "local.txt",
+        size: 0,
+        verified: false,
+      }),
+    );
+    await expect(
+      service.downloadFileWithProgress("/tmp/remote.txt", "local.txt", {
+        sessionId: "session-1",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        success: true,
+        filename: "remote.txt",
+        size: 0,
+        verified: false,
+      }),
+    );
+    expect(readFile).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  test("rejects checksum mismatches and cleans temporary downloads", async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "transfer-test-"));
+    const localPath = path.join(tempDir, "download.txt");
+    const service = createTransferService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            sftp: {
+              stat: (
+                _remotePath: string,
+                callback: (err: Error | null, stats: { size?: number }) => void,
+              ) => callback(null, {}),
+              readFile: (
+                _remotePath: string,
+                callback: (err: Error | null, data: Buffer) => void,
+              ) => callback(null, Buffer.from("remote")),
+            },
+          }) as any,
+      },
+      metrics: createTransferMetrics(),
+      policy: createAllowPolicy(),
+      config: createTestConfig(),
+    });
+    const readFileSpy = jest
+      .spyOn(fs.promises, "readFile")
+      .mockImplementation(async () => Buffer.from("local"));
+    const rmSpy = jest.spyOn(fs.promises, "rm");
+
+    try {
+      await expect(
+        service.downloadFileWithProgress("/tmp/remote.txt", localPath, {
+          sessionId: "session-1",
+        }),
+      ).rejects.toThrow("verification failed");
+      expect(rmSpy).toHaveBeenCalled();
+    } finally {
+      readFileSpy.mockRestore();
+      rmSpy.mockRestore();
+    }
+  });
+
   test("formats transfer metrics", () => {
     expect(formatSpeed(2048)).toContain("KB/s");
     expect(formatSpeed(1024 * 1024)).toContain("MB/s");

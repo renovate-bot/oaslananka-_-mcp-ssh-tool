@@ -24,5 +24,6 @@ describe("TransferToolProvider", () => {
         localPath: "a",
       }),
     ).resolves.toEqual({ success: true });
+    expect(provider.handleTool("missing", {})).toBeUndefined();
   });
 });

@@ -129,4 +129,50 @@ describe("RateLimiter (sliding window)", () => {
     expect(result.blocked).toBe(false);
     permissiveLimiter.destroy();
   });
+
+  test("uses defaults, prunes expired keys, and tolerates repeated destroy", () => {
+    let now = 10_000;
+    const nowSpy = jest.spyOn(Date, "now").mockImplementation(() => now);
+    const defaultLimiter = new RateLimiter();
+
+    try {
+      expect(defaultLimiter.check("default").remaining).toBe(99);
+
+      const internals = defaultLimiter as unknown as {
+        logs: Map<string, number[]>;
+        pruneExpiredLogs: () => void;
+      };
+      internals.logs.set("expired", [1]);
+      internals.logs.set("active", [9_500, 9_900]);
+      now = 65_000;
+      internals.pruneExpiredLogs();
+
+      expect(internals.logs.has("expired")).toBe(false);
+      expect(internals.logs.get("active")).toEqual([9_500, 9_900]);
+    } finally {
+      defaultLimiter.destroy();
+      defaultLimiter.destroy();
+      nowSpy.mockRestore();
+    }
+  });
+
+  test("falls back to current time when an exceeded log has no oldest entry", () => {
+    const sparseLimiter = new RateLimiter({
+      maxRequests: 0,
+      windowMs: 1000,
+      blockOnLimit: true,
+    });
+
+    const result = sparseLimiter.check("empty-window");
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        allowed: false,
+        blocked: true,
+        remaining: 0,
+      }),
+    );
+    expect(result.resetIn).toBeLessThanOrEqual(1000);
+    sparseLimiter.destroy();
+  });
 });

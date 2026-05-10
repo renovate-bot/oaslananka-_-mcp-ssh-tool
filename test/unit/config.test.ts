@@ -13,15 +13,28 @@ describe("ConfigManager", () => {
     delete process.env.SSH_MCP_MAX_STREAM_CHUNKS;
     delete process.env.SSH_MCP_DEBUG;
     delete process.env.SSH_MCP_RATE_LIMIT;
+    delete process.env.SSH_MCP_RATE_LIMIT_MAX;
+    delete process.env.SSH_MCP_RATE_LIMIT_WINDOW_MS;
     delete process.env.SSH_MCP_STRICT_HOST_KEY;
     delete process.env.STRICT_HOST_KEY_CHECKING;
     delete process.env.SSH_MCP_HOST_KEY_POLICY;
+    delete process.env.KNOWN_HOSTS_PATH;
+    delete process.env.SSH_MCP_KNOWN_HOSTS_PATH;
+    delete process.env.SSH_MCP_ALLOWED_CIPHERS;
     delete process.env.SSH_MCP_MAX_FILE_SIZE;
     delete process.env.SSH_MCP_MAX_FILE_WRITE_BYTES;
     delete process.env.SSH_MCP_MAX_TRANSFER_BYTES;
     delete process.env.SSH_MCP_POLICY_FILE;
+    delete process.env.SSH_MCP_POLICY_MODE;
+    delete process.env.SSH_MCP_ALLOW_ROOT_LOGIN;
     delete process.env.SSH_MCP_ALLOW_RAW_SUDO;
+    delete process.env.SSH_MCP_ALLOW_DESTRUCTIVE_COMMANDS;
+    delete process.env.SSH_MCP_ALLOW_DESTRUCTIVE_FS;
+    delete process.env.SSH_MCP_ALLOWED_HOSTS;
+    delete process.env.SSH_MCP_COMMAND_ALLOW;
     delete process.env.SSH_MCP_COMMAND_DENY;
+    delete process.env.SSH_MCP_PATH_ALLOW_PREFIXES;
+    delete process.env.SSH_MCP_PATH_DENY_PREFIXES;
     delete process.env.SSH_MCP_LOCAL_PATH_ALLOW_PREFIXES;
     delete process.env.SSH_MCP_LOCAL_PATH_DENY_PREFIXES;
     delete process.env.SSH_MCP_TUNNEL_ALLOW_BIND_HOSTS;
@@ -31,7 +44,12 @@ describe("ConfigManager", () => {
     delete process.env.SSH_MCP_TUNNEL_ALLOW_PORTS;
     delete process.env.SSH_MCP_TUNNEL_DENY_PORTS;
     delete process.env.SSH_MCP_HTTP_HOST;
+    delete process.env.PORT;
     delete process.env.SSH_MCP_HTTP_PORT;
+    delete process.env.SSH_MCP_HTTP_ALLOWED_ORIGINS;
+    delete process.env.SSH_MCP_HTTP_BEARER_TOKEN_FILE;
+    delete process.env.SSH_MCP_ENABLE_LEGACY_SSE;
+    delete process.env.SSH_MCP_HTTP_MAX_REQUEST_BODY_BYTES;
     delete process.env.SSH_MCP_TOOL_PROFILE;
     delete process.env.SSH_MCP_CONNECTOR_PROFILE;
     delete process.env.SSH_MCP_CONNECTOR_CREDENTIAL_PROVIDER;
@@ -155,6 +173,111 @@ describe("ConfigManager", () => {
         oauthRequiredScopes: ["mcp-ssh-tool.read", "mcp-ssh-tool.plan"],
       }),
     );
+  });
+
+  test("reads full production env surface and policy file overrides", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "policy-config-"));
+    const knownHosts = path.join(tempDir, "known_hosts");
+    const tokenFile = path.join(tempDir, "bearer.token");
+    const policyFile = path.join(tempDir, "policy.json");
+    fs.writeFileSync(
+      policyFile,
+      JSON.stringify({
+        mode: "explain",
+        allowedHosts: ["from-file.example"],
+        commandAllow: ["^systemctl status"],
+        pathAllowPrefixes: ["/srv"],
+        pathDenyPrefixes: ["/srv/private"],
+        tunnelAllowPorts: ["8443"],
+      }),
+      "utf8",
+    );
+
+    process.env.SSH_MCP_RATE_LIMIT_MAX = "250";
+    process.env.SSH_MCP_RATE_LIMIT_WINDOW_MS = "30000";
+    process.env.KNOWN_HOSTS_PATH = knownHosts;
+    process.env.SSH_MCP_ALLOWED_CIPHERS = "aes256-gcm@openssh.com\nchacha20-poly1305@openssh.com";
+    process.env.SSH_MCP_POLICY_FILE = policyFile;
+    process.env.SSH_MCP_POLICY_MODE = "explain";
+    process.env.SSH_MCP_ALLOW_ROOT_LOGIN = "yes";
+    process.env.SSH_MCP_ALLOW_DESTRUCTIVE_COMMANDS = "on";
+    process.env.SSH_MCP_ALLOW_DESTRUCTIVE_FS = "1";
+    process.env.SSH_MCP_ALLOWED_HOSTS = "env.example,prod.example";
+    process.env.SSH_MCP_COMMAND_ALLOW = "uptime,whoami";
+    process.env.SSH_MCP_PATH_ALLOW_PREFIXES = "/data,/srv/app";
+    process.env.SSH_MCP_PATH_DENY_PREFIXES = "/data/secret";
+    process.env.PORT = "8080";
+    process.env.SSH_MCP_HTTP_ALLOWED_ORIGINS = "https://chatgpt.com,https://sshautomator.example";
+    process.env.SSH_MCP_HTTP_BEARER_TOKEN_FILE = tokenFile;
+    process.env.SSH_MCP_ENABLE_LEGACY_SSE = "true";
+    process.env.SSH_MCP_HTTP_MAX_REQUEST_BODY_BYTES = "65536";
+    process.env.SSH_MCP_CONNECTOR_CREDENTIAL_COMMAND = "resolve-ssh-credential";
+    process.env.SSH_MCP_CONNECTOR_CREDENTIAL_COMMAND_TIMEOUT_MS = "9000";
+    process.env.SSH_MCP_OAUTH_RESOURCE = "https://sshautomator.example/mcp";
+
+    try {
+      const config = new ConfigManager();
+
+      expect(config.get("rateLimit")).toEqual({
+        enabled: true,
+        maxRequests: 250,
+        windowMs: 30000,
+      });
+      expect(config.get("security")).toEqual(
+        expect.objectContaining({
+          allowRootLogin: true,
+          knownHostsPath: knownHosts,
+          allowedCiphers: ["aes256-gcm@openssh.com", "chacha20-poly1305@openssh.com"],
+        }),
+      );
+      expect(config.get("policy")).toEqual(
+        expect.objectContaining({
+          mode: "explain",
+          allowRootLogin: true,
+          allowDestructiveCommands: true,
+          allowDestructiveFs: true,
+          allowedHosts: ["env.example", "prod.example"],
+          commandAllow: ["uptime", "whoami"],
+          pathAllowPrefixes: ["/data", "/srv/app"],
+          pathDenyPrefixes: ["/data/secret"],
+          tunnelAllowPorts: ["8443"],
+        }),
+      );
+      expect(config.get("http")).toEqual(
+        expect.objectContaining({
+          port: 8080,
+          allowedOrigins: ["https://chatgpt.com", "https://sshautomator.example"],
+          bearerTokenFile: tokenFile,
+          enableLegacySse: true,
+          maxRequestBodyBytes: 65536,
+        }),
+      );
+      expect(config.get("connector")).toEqual(
+        expect.objectContaining({
+          credentialCommand: "resolve-ssh-credential",
+          credentialCommandTimeoutMs: 9000,
+        }),
+      );
+      expect(config.get("auth").oauthResource).toBe("https://sshautomator.example/mcp");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back safely for invalid scalar env values", () => {
+    process.env.SSH_MCP_MAX_SESSIONS = "not-a-number";
+    process.env.SSH_MCP_HOST_KEY_POLICY = "loose";
+    process.env.SSH_MCP_CONNECTOR_CREDENTIAL_PROVIDER = "vault";
+    process.env.SSH_MCP_HTTP_AUTH_MODE = "none";
+    process.env.SSH_MCP_HTTP_PORT = "NaN";
+
+    const config = new ConfigManager();
+
+    expect(config.get("maxSessions")).toBe(20);
+    expect(config.get("security").hostKeyPolicy).toBe("strict");
+    expect(config.get("connector").credentialProvider).toBe("none");
+    expect(config.get("auth").mode).toBe("bearer");
+    expect(config.get("http").port).toBe(3000);
   });
 
   test("reads STRICT_HOST_KEY_CHECKING as the preferred host verification flag", () => {

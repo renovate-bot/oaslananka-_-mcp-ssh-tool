@@ -709,6 +709,139 @@ describe("SessionManager", () => {
     ).rejects.toMatchObject({ code: "ECONN" });
   });
 
+  test("translates timeout, host key, host-denied, and generic connection failures", async () => {
+    jest.spyOn(NodeSSH.prototype, "connect").mockImplementationOnce(async () => {
+      throw new Error("connection timeout");
+    });
+    await expect(
+      manager.openSession({
+        host: "timeout.example",
+        username: "demo",
+        password: "secret",
+        auth: "password",
+      }),
+    ).rejects.toMatchObject({ code: "ETIMEOUT" });
+
+    jest.spyOn(NodeSSH.prototype, "connect").mockImplementationOnce(async () => {
+      throw new Error("host key mismatch");
+    });
+    await expect(
+      manager.openSession({
+        host: "hostkey.example",
+        username: "demo",
+        password: "secret",
+        auth: "password",
+      }),
+    ).rejects.toMatchObject({ code: "EHOSTKEY" });
+
+    jest.spyOn(NodeSSH.prototype, "connect").mockImplementationOnce(async () => {
+      throw new Error("host denied by policy");
+    });
+    await expect(
+      manager.openSession({
+        host: "denied.example",
+        username: "demo",
+        password: "secret",
+        auth: "password",
+      }),
+    ).rejects.toMatchObject({ code: "EHOSTKEY" });
+
+    jest.spyOn(NodeSSH.prototype, "connect").mockImplementationOnce(async () => {
+      throw "socket closed";
+    });
+    await expect(
+      manager.openSession({
+        host: "generic.example",
+        username: "demo",
+        password: "secret",
+        auth: "password",
+      }),
+    ).rejects.toMatchObject({ code: "ECONN" });
+  });
+
+  test("configures ciphers and keeps accept-new host keys memory-only", async () => {
+    const acceptNewManager = new SessionManager(2, 1000, 10000, {
+      allowRootLogin: false,
+      allowedCiphers: ["aes256-gcm@openssh.com"],
+      hostKeyPolicy: "accept-new",
+      knownHostsPath: "/tmp/known_hosts",
+    });
+
+    const session = await acceptNewManager.openSession({
+      host: "new.example",
+      username: "demo",
+      password: "secret",
+      auth: "password",
+    });
+    const connectConfig = (
+      acceptNewManager.getSession(session.sessionId)?.ssh as NodeSSH & {
+        __connectConfig?: Record<string, unknown>;
+      }
+    ).__connectConfig as Record<string, any>;
+    const verifier = connectConfig.hostVerifier as (fingerprint: string) => boolean;
+
+    expect(connectConfig.algorithms).toEqual(
+      expect.objectContaining({ cipher: ["aes256-gcm@openssh.com"] }),
+    );
+    expect(verifier("SHA256:first")).toBe(true);
+    expect(verifier("first")).toBe(true);
+    expect(verifier("second")).toBe(false);
+
+    await acceptNewManager.destroy();
+  });
+
+  test("fails strict host verification closed for missing and malformed known_hosts data", async () => {
+    const noPathManager = new SessionManager(2, 1000, 10000, {
+      allowRootLogin: false,
+      allowedCiphers: [],
+      hostKeyPolicy: "strict",
+      knownHostsPath: "",
+    });
+    const noPathSession = await noPathManager.openSession({
+      host: "nopath.example",
+      username: "demo",
+      password: "secret",
+      auth: "password",
+    });
+    const noPathConfig = (
+      noPathManager.getSession(noPathSession.sessionId)?.ssh as NodeSSH & {
+        __connectConfig?: Record<string, unknown>;
+      }
+    ).__connectConfig;
+    expect((noPathConfig?.hostVerifier as (fingerprint: string) => boolean)("anything")).toBe(
+      false,
+    );
+    await noPathManager.destroy();
+
+    const malformedKnownHostsPath = path.join(tempDir, "malformed_known_hosts");
+    fs.writeFileSync(
+      malformedKnownHostsPath,
+      [
+        "@revoked too-short",
+        "@cert-authority example.com ssh-unsupported abc",
+        "missing-key-type",
+        "example.com ssh-unsupported abc",
+        "|1|%%%|%%% ssh-ed25519 not-base64",
+      ].join("\n"),
+      "utf8",
+    );
+    const malformed = await manager.openSession({
+      host: "example.com",
+      username: "demo",
+      password: "secret",
+      auth: "password",
+      knownHostsPath: malformedKnownHostsPath,
+    });
+    const malformedConfig = (
+      manager.getSession(malformed.sessionId)?.ssh as NodeSSH & {
+        __connectConfig?: Record<string, unknown>;
+      }
+    ).__connectConfig;
+    expect((malformedConfig?.hostVerifier as (fingerprint: string) => boolean)("anything")).toBe(
+      false,
+    );
+  });
+
   test("swallows dispose errors while closing sessions", async () => {
     const session = await manager.openSession({
       host: "dispose.example",

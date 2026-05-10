@@ -581,4 +581,232 @@ describe("createFsService", () => {
       code: "EFS",
     });
   });
+
+  test("honors explain mode for write, mkdir, and remove without touching transports", async () => {
+    const sftp = {
+      writeFile: jest.fn(),
+      mkdir: jest.fn(),
+      readdir: jest.fn(),
+      unlink: jest.fn(),
+      rmdir: jest.fn(),
+    };
+    const execCommand = jest.fn();
+    const service = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo({ policyMode: "explain" }),
+            ssh: { execCommand },
+            sftp,
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(service.writeFile("session-1", "/tmp/demo", "data")).resolves.toBe(true);
+    await expect(service.makeDirectories("session-1", "/tmp/demo")).resolves.toBe(true);
+    await expect(service.removeRecursive("session-1", "/tmp/demo")).resolves.toBe(true);
+
+    expect(execCommand).not.toHaveBeenCalled();
+    expect(sftp.writeFile).not.toHaveBeenCalled();
+    expect(sftp.mkdir).not.toHaveBeenCalled();
+    expect(sftp.readdir).not.toHaveBeenCalled();
+  });
+
+  test("lists SSH fallback entries without pagination when no page is requested", async () => {
+    const execCommand: any = jest.fn();
+    execCommand.mockResolvedValue({
+      code: 0,
+      stdout: "a.txt\tfile\t5\t1700000000\nlink\tsymlink\t0\t1700000001\n",
+      stderr: "",
+    });
+    const service = createFsService({
+      sessionManager: {
+        getSession: () => ({ info: createSessionInfo(), ssh: { execCommand } }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(service.listDirectory("session-1", "/tmp")).resolves.toEqual({
+      entries: [
+        expect.objectContaining({ name: "a.txt", type: "file", size: 5 }),
+        expect.objectContaining({ name: "link", type: "symlink", size: 0 }),
+      ],
+    });
+  });
+
+  test("covers SFTP stat variants, pagination without next token, and cleanup failure", async () => {
+    const unlink = jest.fn((_path: string, callback: (err?: Error | null) => void) =>
+      callback(new Error("cleanup failed")),
+    );
+    const stat: any = jest.fn();
+    stat.mockImplementationOnce(
+      (
+        _path: string,
+        callback: (
+          err: Error | null,
+          stats: {
+            mode?: number;
+            size?: number;
+            mtime?: number;
+            isFile?: () => boolean;
+            isDirectory?: () => boolean;
+            isSymbolicLink?: () => boolean;
+          },
+        ) => void,
+      ) =>
+        callback(null, {
+          mode: 0,
+          size: undefined,
+          mtime: undefined,
+          isFile: () => false,
+          isDirectory: () => false,
+          isSymbolicLink: () => true,
+        }),
+    );
+    const service = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            ssh: { execCommand: jest.fn() },
+            info: createSessionInfo(),
+            sftp: {
+              stat,
+              readdir: (
+                _dirPath: string,
+                callback: (
+                  err: Error | null,
+                  list: Array<{
+                    filename: string;
+                    attrs: { mode?: number; size?: number; mtime?: number };
+                  }>,
+                ) => void,
+              ) =>
+                callback(null, [
+                  { filename: "socket", attrs: { mode: 0, size: 0 } },
+                  { filename: "dir", attrs: { mode: 0o040755, size: 0, mtime: 1700000000 } },
+                ]),
+              writeFile: (
+                _path: string,
+                _data: Buffer,
+                _opts: object,
+                callback: (err?: Error | null) => void,
+              ) => callback(new Error("write failed")),
+              unlink,
+            },
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(service.statFile("session-1", "/tmp/link")).resolves.toEqual(
+      expect.objectContaining({ type: "symlink", size: 0, mode: 0 }),
+    );
+    await expect(service.listDirectory("session-1", "/tmp", 0, 10)).resolves.toEqual({
+      entries: [
+        expect.objectContaining({ name: "socket", type: "other" }),
+        expect.objectContaining({ name: "dir", type: "directory" }),
+      ],
+    });
+    await expect(service.writeFile("session-1", "/tmp/demo", "data")).rejects.toMatchObject({
+      code: "EFS",
+    });
+    expect(unlink).toHaveBeenCalled();
+  });
+
+  test("fails closed for missing sessions across mutation and metadata helpers", async () => {
+    const service = createFsService({
+      sessionManager: {
+        getSession: () => undefined,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(service.writeFile("missing", "/tmp/demo", "data")).rejects.toThrow(
+      "Session missing not found or expired",
+    );
+    await expect(service.statFile("missing", "/tmp/demo")).rejects.toThrow(
+      "Session missing not found or expired",
+    );
+    await expect(service.listDirectory("missing", "/tmp")).rejects.toThrow(
+      "Session missing not found or expired",
+    );
+    await expect(service.makeDirectories("missing", "/tmp/demo")).rejects.toThrow(
+      "Session missing not found or expired",
+    );
+    await expect(service.removeRecursive("missing", "/tmp/demo")).rejects.toThrow(
+      "Session missing not found or expired",
+    );
+    await expect(service.renameFile("missing", "/tmp/a", "/tmp/b")).rejects.toThrow(
+      "Session missing not found or expired",
+    );
+  });
+
+  test("covers fallback defaults and mkdir race tolerance", async () => {
+    const execCommand: any = jest.fn();
+    execCommand
+      .mockResolvedValueOnce({ code: 0, stdout: "\n", stderr: "" })
+      .mockResolvedValueOnce({ code: 0, stdout: "name-only\n", stderr: "" })
+      .mockResolvedValueOnce({ code: 1, stdout: "", stderr: "" });
+    const fallbackService = createFsService({
+      sessionManager: {
+        getSession: () => ({ info: createSessionInfo(), ssh: { execCommand } }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(fallbackService.statFile("session-1", "/tmp/blank")).resolves.toEqual(
+      expect.objectContaining({ size: 0, type: "" }),
+    );
+    await expect(fallbackService.listDirectory("session-1", "/tmp")).resolves.toEqual({
+      entries: [expect.objectContaining({ name: "name-only", type: "other", size: 0 })],
+    });
+    await expect(fallbackService.readFile("session-1", "/tmp/fail")).rejects.toMatchObject({
+      code: "EFS",
+    });
+
+    const mkdir = jest.fn((_path: string, callback: (err?: Error | null) => void) =>
+      callback(Object.assign(new Error("already exists"), { code: 4 })),
+    );
+    const mkdirRaceService = createFsService({
+      sessionManager: {
+        getSession: () =>
+          ({
+            info: createSessionInfo(),
+            ssh: { execCommand: jest.fn() },
+            sftp: {
+              stat: (
+                _path: string,
+                callback: (err: Error | null, stats: { mode?: number }) => void,
+              ) => callback(new Error("missing"), { mode: 0 }),
+              mkdir,
+            },
+          }) as any,
+        getOSInfo: async () => createLinuxOSInfo(),
+      },
+      config: createTestConfig(),
+      metrics: createFileMetrics(),
+      policy: createAllowPolicy(),
+    } as any);
+
+    await expect(mkdirRaceService.makeDirectories("session-1", "relative/path")).resolves.toBe(
+      true,
+    );
+    expect(mkdir).toHaveBeenCalled();
+  });
 });

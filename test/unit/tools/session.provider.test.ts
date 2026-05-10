@@ -108,4 +108,99 @@ describe("SessionToolProvider", () => {
       error: "Session not found or expired",
     });
   });
+
+  test("normalizes optional open-session fields and handles negative close/ping paths", async () => {
+    const { SessionToolProvider } = await loadProvider();
+    const openSession = jest.fn(async () => ({
+      sessionId: "session-2",
+      host: "target.example",
+      username: "deploy",
+      sftpAvailable: false,
+      expiresInMs: 5000,
+    }));
+    const closeSession = jest.fn(async () => false);
+    const recordSessionCreated = jest.fn();
+    const recordSessionClosed = jest.fn();
+    const execCommand = jest
+      .fn<() => Promise<{ code: number }>>()
+      .mockResolvedValueOnce({ code: 1 })
+      .mockRejectedValueOnce(new Error("network down"));
+    const provider = new SessionToolProvider({
+      sessionManager: {
+        openSession,
+        closeSession,
+        getActiveSessions: () => [],
+        getSession: () => ({
+          ssh: { execCommand },
+          info: {
+            host: "target.example",
+            expiresAt: Date.now() + 5000,
+          },
+        }),
+      } as any,
+      metrics: {
+        recordSessionCreated,
+        recordSessionClosed,
+      } as any,
+    });
+
+    await expect(
+      provider.handleTool("ssh_open_session", {
+        host: "target.example",
+        username: "deploy",
+        port: 2222,
+        auth: "key",
+        password: "secret",
+        privateKey: "inline-key",
+        privateKeyPath: "/tmp/id_ed25519",
+        passphrase: "phrase",
+        useAgent: true,
+        readyTimeoutMs: 7000,
+        ttlMs: 15000,
+        strictHostKeyChecking: false,
+        hostKeyPolicy: "accept-new",
+        knownHostsPath: "/tmp/known_hosts",
+        expectedHostKeySha256: "SHA256:abc",
+        policyMode: "explain",
+      }),
+    ).resolves.toEqual(expect.objectContaining({ sessionId: "session-2" }));
+    expect((openSession as any).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        host: "target.example",
+        username: "deploy",
+        port: 2222,
+        auth: "key",
+        password: "secret",
+        privateKey: "inline-key",
+        privateKeyPath: "/tmp/id_ed25519",
+        passphrase: "phrase",
+        useAgent: true,
+        readyTimeoutMs: 7000,
+        ttlMs: 15000,
+        strictHostKeyChecking: false,
+        hostKeyPolicy: "accept-new",
+        knownHostsPath: "/tmp/known_hosts",
+        expectedHostKeySha256: "SHA256:abc",
+        policyMode: "explain",
+      }),
+    );
+    expect(recordSessionCreated).toHaveBeenCalledTimes(1);
+
+    await expect(
+      provider.handleTool("ssh_close_session", { sessionId: "session-2" }),
+    ).resolves.toBe(false);
+    expect(recordSessionClosed).not.toHaveBeenCalled();
+
+    await expect(provider.handleTool("ssh_ping", { sessionId: "session-2" })).resolves.toEqual(
+      expect.objectContaining({ alive: false }),
+    );
+    await expect(provider.handleTool("ssh_ping", { sessionId: "session-2" })).resolves.toEqual({
+      alive: false,
+      error: "Connection test failed",
+    });
+    expect(provider.handleTool("not_a_session_tool", {})).toBeUndefined();
+    expect(provider.getTools().map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["ssh_open_session", "ssh_resolve_host"]),
+    );
+  });
 });

@@ -261,6 +261,41 @@ describe("SSHMCPServer", () => {
     await destroyContainer(base);
   });
 
+  test("delegates allowed rate-limited calls and defaults missing arguments", async () => {
+    const base = createTestContainer();
+    const container = {
+      ...base,
+      config: {
+        get: jest.fn((key: string) =>
+          key === "rateLimit" ? { enabled: true } : base.config.get(key as never),
+        ),
+        getAll: jest.fn(() => ({
+          ...base.config.getAll(),
+          rateLimit: { enabled: true, maxRequests: 100, windowMs: 60_000 },
+        })),
+      },
+      rateLimiter: {
+        check: jest.fn(() => ({ allowed: true, resetIn: 0 })),
+        destroy: jest.fn(),
+      },
+    } as unknown as AppContainer;
+
+    const server = new SSHMCPServer(container);
+    const handlers = getHandlers(server);
+    const result = (await handlers.get(CallToolRequestSchema)?.({
+      params: { name: "ssh_list_sessions" },
+    })) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toContain('"count"');
+    expect(container.rateLimiter.check as any).toHaveBeenCalledWith("global");
+
+    await destroyContainer(base);
+  });
+
   test("logs server errors and connects transports in run()", async () => {
     const container = createTestContainer();
     const server = new SSHMCPServer(container);
@@ -271,10 +306,14 @@ describe("SSHMCPServer", () => {
     ).server;
 
     internalServer.onerror?.(new Error("boom"));
+    internalServer.onerror?.("string-error" as unknown as Error);
     await server.run();
 
     expect(errorSpy).toHaveBeenCalledWith("Server error", {
       error: "boom",
+    });
+    expect(errorSpy).toHaveBeenCalledWith("Server error", {
+      error: "string-error",
     });
     expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(infoSpy).toHaveBeenCalledWith("SSH MCP Server started successfully");

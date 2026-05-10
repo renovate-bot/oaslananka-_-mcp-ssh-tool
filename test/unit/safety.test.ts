@@ -46,8 +46,21 @@ describe("formatSafetyWarning", () => {
     expect(warning).toContain("do not run");
   });
 
+  test("defaults warning formatting when risk and suggestion are absent", () => {
+    const warning = formatSafetyWarning({
+      safe: false,
+      warning: "review command",
+    });
+
+    expect(warning).toContain("⚠️");
+    expect(warning).toContain("review command");
+    expect(warning).not.toContain("Suggestion");
+  });
+
   test("augments command results when needed", () => {
     const result = addSafetyWarningToResult("rm -rf /", { code: 0 });
     expect(result.safetyWarning).toContain("WARNING");
+
+    expect(addSafetyWarningToResult("echo ok", { code: 0 })).toEqual({ code: 0 });
   });
 });
