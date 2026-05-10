@@ -10,9 +10,11 @@ import {
   signEnvelope,
 } from "../../src/remote/crypto.js";
 import { createAgentPolicy } from "../../src/remote/policy.js";
+import { capabilitiesFromScopes, parseScopes } from "../../src/remote/scopes.js";
 import type {
   ActionRecord,
   ActionResultEnvelope,
+  RemotePrincipal,
   RemoteAgentRecord,
   RemoteConfig,
 } from "../../src/remote/types.js";
@@ -41,6 +43,49 @@ function testConfig(baseDir: string): RemoteConfig {
 }
 
 describe("remote control plane action result replay protection", () => {
+  test("generates deterministic agent CLI commands for enrollment", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "sshautomator-control-plane-"));
+    const controlPlane = new RemoteControlPlane(testConfig(dir));
+    await controlPlane.initialize();
+    try {
+      const principal: RemotePrincipal = {
+        tokenId: "tok_test",
+        userId: "github:1",
+        githubId: "1",
+        githubLogin: "tester",
+        capabilities: capabilitiesFromScopes(parseScopes("agents:admin")),
+        scopes: ["agents:admin"],
+      };
+      const harness = controlPlane as unknown as {
+        createEnrollmentToken(
+          principal: RemotePrincipal,
+          args: Record<string, unknown>,
+        ): Record<string, unknown>;
+      };
+
+      const result = harness.createEnrollmentToken(principal, {
+        alias: "prod one",
+        requested_profile: "operations",
+      });
+
+      expect(result.commands).toEqual(
+        expect.objectContaining({
+          npm: expect.stringContaining(
+            "npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll",
+          ),
+          run: "npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run",
+          windows: expect.stringContaining(
+            "npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll",
+          ),
+        }),
+      );
+      expect(JSON.stringify(result.commands)).toContain("--alias 'prod one'");
+      expect(JSON.stringify(result.commands)).not.toContain("npx mcp-ssh-tool agent");
+    } finally {
+      controlPlane.close();
+    }
+  });
+
   test("rejects an action result nonce that was already seen on the connection", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "sshautomator-control-plane-"));
     const controlPlane = new RemoteControlPlane(testConfig(dir));

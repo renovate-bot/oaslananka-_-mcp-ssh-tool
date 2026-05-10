@@ -58,6 +58,19 @@ function loadConfig(): AgentConfigFile {
   return JSON.parse(readFileSync(configPath(), "utf8")) as AgentConfigFile;
 }
 
+function requireConfig(): AgentConfigFile {
+  if (!existsSync(configPath())) {
+    throw new Error(
+      [
+        "Agent is not enrolled.",
+        "Enroll this host first with:",
+        "  npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll --server <url> --token <one-time-token> --alias <alias>",
+      ].join("\n"),
+    );
+  }
+  return loadConfig();
+}
+
 function saveConfig(config: AgentConfigFile): void {
   const target = configPath();
   mkdirSync(path.dirname(target), { recursive: true });
@@ -117,9 +130,7 @@ async function enroll(argv: string[]): Promise<void> {
   const token = parseFlag(argv, "--token");
   const alias = parseFlag(argv, "--alias") ?? os.hostname();
   if (!server || !token) {
-    throw new Error(
-      "Usage: mcp-ssh-tool agent enroll --server <url> --token <token> --alias <alias>",
-    );
+    throw new Error("Usage: mcp-ssh-agent enroll --server <url> --token <token> --alias <alias>");
   }
   const keyPair: PemKeyPair = ensurePemKeyPair(keyPath());
   const response = await postJson(`${server}/api/agents/enroll`, {
@@ -149,7 +160,7 @@ async function enroll(argv: string[]): Promise<void> {
 }
 
 async function runAgent(): Promise<void> {
-  const config = loadConfig();
+  const config = requireConfig();
   const WebSocketCtor = runtimeWebSocket();
   const executor = new AgentExecutor(config.policy, config.privateKeyPem);
   const seenActions = new Map<string, number>();
@@ -276,7 +287,7 @@ function status(): void {
 
 function installService(): void {
   const config = existsSync(configPath()) ? loadConfig() : undefined;
-  const command = `mcp-ssh-tool agent run`;
+  const command = `mcp-ssh-agent run`;
   if (process.platform === "win32") {
     output("Windows service installation requires an elevated PowerShell session.");
     output(`Use a service manager such as NSSM or PowerShell Scheduled Task to run: ${command}`);
@@ -297,14 +308,14 @@ function installService(): void {
 
 function uninstallService(): void {
   if (process.platform === "win32") {
-    output("Remove the Windows service or scheduled task that runs mcp-ssh-tool agent run.");
+    output("Remove the Windows service or scheduled task that runs mcp-ssh-agent run.");
     return;
   }
   if (process.platform === "darwin") {
-    output("Unload and remove the launchd plist that runs mcp-ssh-tool agent run.");
+    output("Unload and remove the launchd plist that runs mcp-ssh-agent run.");
     return;
   }
-  output("Disable and remove the systemd service that runs mcp-ssh-tool agent run.");
+  output("Disable and remove the systemd service that runs mcp-ssh-agent run.");
 }
 
 export async function runAgentCli(argv: string[]): Promise<void> {
@@ -327,10 +338,10 @@ export async function runAgentCli(argv: string[]): Promise<void> {
       break;
     default:
       output("Usage:");
-      output("  mcp-ssh-tool agent enroll --server <url> --token <token> --alias <alias>");
-      output("  mcp-ssh-tool agent run");
-      output("  mcp-ssh-tool agent status");
-      output("  mcp-ssh-tool agent install-service");
-      output("  mcp-ssh-tool agent uninstall-service");
+      output("  mcp-ssh-agent enroll --server <url> --token <token> --alias <alias>");
+      output("  mcp-ssh-agent run");
+      output("  mcp-ssh-agent status");
+      output("  mcp-ssh-agent install-service");
+      output("  mcp-ssh-agent uninstall-service");
   }
 }

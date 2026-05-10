@@ -85,6 +85,14 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function quotePosixArg(value: string): string {
+  return `'${value.replace(/'/gu, `'"'"'`)}'`;
+}
+
+function quotePowerShellArg(value: string): string {
+  return `'${value.replace(/'/gu, "''")}'`;
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -1223,15 +1231,26 @@ export class RemoteControlPlane {
     token: string | undefined,
   ): Record<string, unknown> {
     const tokenArgument = token ?? "<create-a-new-enrollment-token>";
-    const base = `npx mcp-ssh-tool agent enroll --server ${this.config.publicBaseUrl} --token ${tokenArgument} --alias ${agent.alias}`;
+    const posixBase = [
+      "npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll",
+      `--server ${quotePosixArg(this.config.publicBaseUrl)}`,
+      `--token ${quotePosixArg(tokenArgument)}`,
+      `--alias ${quotePosixArg(agent.alias)}`,
+    ].join(" ");
+    const powershellBase = [
+      "npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll",
+      `--server ${quotePowerShellArg(this.config.publicBaseUrl)}`,
+      `--token ${quotePowerShellArg(tokenArgument)}`,
+      `--alias ${quotePowerShellArg(agent.alias)}`,
+    ].join(" ");
     return {
       agent_id: agent.id,
       alias: agent.alias,
       token_recoverable: Boolean(token),
       commands: {
-        npm: base,
-        run: "npx mcp-ssh-tool agent run",
-        windows: `npx mcp-ssh-tool agent enroll --server ${this.config.publicBaseUrl} --token ${tokenArgument} --alias ${agent.alias}`,
+        npm: posixBase,
+        run: "npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run",
+        windows: powershellBase,
       },
       expires_in_seconds: token ? this.config.enrollmentTokenTtlSeconds : undefined,
     };

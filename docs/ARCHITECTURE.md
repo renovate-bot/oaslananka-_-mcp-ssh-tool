@@ -59,8 +59,8 @@ It exposes:
 The agent runs on the user's own machine or server:
 
 ```bash
-npx mcp-ssh-tool agent enroll --server https://sshautomator.example.com --token <one-time-token> --alias prod-1
-npx mcp-ssh-tool agent run
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll --server https://sshautomator.example.com --token <one-time-token> --alias prod-1
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run
 ```
 
 The agent generates an Ed25519 keypair locally, sends only the public key during enrollment, connects outbound over WebSocket, verifies control-plane signatures, enforces local policy, executes bounded actions, signs results, and returns them to the control plane.

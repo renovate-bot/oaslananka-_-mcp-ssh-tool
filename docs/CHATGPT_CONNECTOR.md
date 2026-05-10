@@ -81,5 +81,5 @@ For a public ChatGPT connector, place this behind HTTPS and use the HTTPS public
 | `GET /mcp` returns `401` | Endpoint is protected | Use the OAuth connector flow or send a valid bearer token |
 | `invalid redirect_uri` | DCR or authorize redirect mismatch | Use the redirect URI registered by ChatGPT |
 | `GitHub user is not allowed` | Allowlist denied login | Add login/ID or set `AUTH_ALLOW_ALL_USERS=true` intentionally |
-| `AGENT_OFFLINE` | No outbound agent is connected | Run `mcp-ssh-tool agent run` on the host |
+| `AGENT_OFFLINE` | No outbound agent is connected | Run `npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run` on the host |
 | `CAPABILITY_DENIED` | Agent local policy denied action | Update the agent profile/policy deliberately |

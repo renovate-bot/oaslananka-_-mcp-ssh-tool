@@ -16,7 +16,7 @@ curl -X POST https://sshautomator.example.com/api/agents/enrollment-tokens \
 Run the returned command on the target host:
 
 ```bash
-npx mcp-ssh-tool agent enroll \
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll \
   --server https://sshautomator.example.com \
   --token <one-time-token> \
   --alias prod-1
@@ -27,8 +27,10 @@ The token is one-time use and expires quickly. It is stored only as a hash on th
 ## Run
 
 ```bash
-npx mcp-ssh-tool agent run
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run
 ```
+
+Keep this command running in its own terminal or supervised service. The command opens the outbound connection to the control plane; if the terminal is closed, the agent goes offline and ChatGPT cannot dispatch actions to the host.
 
 The agent reads its local config from:
 
@@ -39,13 +41,13 @@ The agent reads its local config from:
 Override with:
 
 ```bash
-SSHAUTOMATOR_AGENT_CONFIG=/secure/path/agent.json npx mcp-ssh-tool agent run
+SSHAUTOMATOR_AGENT_CONFIG=/secure/path/agent.json npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run
 ```
 
 ## Status
 
 ```bash
-npx mcp-ssh-tool agent status
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent status
 ```
 
 The status command prints the server URL, agent ID, alias, profile, and config path. It does not print private keys or tokens.
@@ -55,8 +57,8 @@ The status command prints the server URL, agent ID, alias, profile, and config p
 The CLI provides platform-aware service guidance:
 
 ```bash
-npx mcp-ssh-tool agent install-service
-npx mcp-ssh-tool agent uninstall-service
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent install-service
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent uninstall-service
 ```
 
 Linux production deployments should run the agent under a dedicated non-root user by default. Full-admin mode is an explicit choice and should be limited to trusted hosts.

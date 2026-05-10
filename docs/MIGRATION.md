@@ -38,7 +38,7 @@ These tools route through an enrolled outbound agent and are capability-gated.
 3. Register the MCP URL in ChatGPT as `https://<host>/mcp`.
 4. Use `create_enrollment_token` to create a one-time agent install command.
 5. Run the agent enrollment command on the target host.
-6. Start the agent with `mcp-ssh-tool agent run` or a supervised service.
+6. Start the agent with `mcp-ssh-agent run` or a supervised service.
 7. Begin with `read-only` or `operations`; use `full-admin` only after explicit review.
 
 ## Credential Handling Change

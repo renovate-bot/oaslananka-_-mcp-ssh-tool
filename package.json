@@ -25,7 +25,8 @@
     "registry"
   ],
   "bin": {
-    "mcp-ssh-tool": "dist/index.js"
+    "mcp-ssh-tool": "dist/index.js",
+    "mcp-ssh-agent": "dist/agent-bin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

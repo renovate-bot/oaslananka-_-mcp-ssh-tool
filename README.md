@@ -85,8 +85,8 @@ Remote mode adds OAuth/DCR endpoints, a protected `/mcp` endpoint, agent enrollm
 Enroll an agent on the user's own host:
 
 ```bash
-npx mcp-ssh-tool agent enroll --server https://sshautomator.example.com --token <one-time-token> --alias prod-1
-npx mcp-ssh-tool agent run
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent enroll --server https://sshautomator.example.com --token <one-time-token> --alias prod-1
+npx --yes --package mcp-ssh-tool@latest mcp-ssh-agent run
 ```
 
 The agent verifies signed control-plane action envelopes, enforces local policy, executes bounded actions, signs results, and returns them over the outbound connection. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CHATGPT_CONNECTOR.md](docs/CHATGPT_CONNECTOR.md), and [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md).
