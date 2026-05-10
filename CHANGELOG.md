@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.7...mcp-ssh-tool-v2.3.0) (2026-05-10)
+
+
+### Features
+
+* **remote:** add no-custody agent control plane ([4c552b7](https://github.com/oaslananka-lab/mcp-ssh-tool/commit/4c552b77247da05a68e02ca78909cfce21a51423))
+
 ## [2.2.7](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.6...mcp-ssh-tool-v2.2.7) (2026-05-10)
 
 
