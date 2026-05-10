@@ -12,6 +12,8 @@ data/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # IDE files
 .vscode/
