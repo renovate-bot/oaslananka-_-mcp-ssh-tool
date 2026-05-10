@@ -30,12 +30,12 @@ run_zizmor() {
   fi
 
   if command -v uv >/dev/null 2>&1; then
-    uv tool run --from zizmor zizmor --offline --min-severity low .github/workflows
+    uv tool run --from zizmor zizmor --min-severity low .github/workflows
     return
   fi
 
   if command -v powershell.exe >/dev/null 2>&1; then
-    powershell.exe -NoProfile -Command "\$ErrorActionPreference = 'Stop'; uv tool run --from zizmor zizmor --offline --min-severity low .github/workflows"
+    powershell.exe -NoProfile -Command "\$ErrorActionPreference = 'Stop'; uv tool run --from zizmor zizmor --min-severity low .github/workflows"
     return
   fi
 
