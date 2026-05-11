@@ -16,14 +16,18 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: mcp-registry-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
-    if: ${{ inputs.publish == true || github.event_name == 'release' }}
+    if: ${{ github.repository == 'oaslananka-lab/mcp-ssh-tool' && (inputs.publish == true || github.event_name == 'release') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
       - name: Verify server metadata
