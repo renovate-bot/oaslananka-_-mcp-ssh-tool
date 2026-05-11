@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.3.0...mcp-ssh-tool-v2.3.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* **agent:** add dedicated install command ([33c9b27](https://github.com/oaslananka-lab/mcp-ssh-tool/commit/33c9b274d546c9f47463effd54fb27bd7090f737))
+* **render:** enable native oauth control plane ([81be2c2](https://github.com/oaslananka-lab/mcp-ssh-tool/commit/81be2c23bc69239c5ff5fff4041a9d6a24006331))
+
 ## [2.3.0](https://github.com/oaslananka-lab/mcp-ssh-tool/compare/mcp-ssh-tool-v2.2.7...mcp-ssh-tool-v2.3.0) (2026-05-10)
 
 
