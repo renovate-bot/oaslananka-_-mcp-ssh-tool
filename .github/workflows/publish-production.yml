@@ -225,7 +225,17 @@ jobs:
       - name: Login via GitHub OIDC
         run: mcp-publisher login github-oidc
       - name: Validate server.json
-        run: mcp-publisher publish --dry-run
+        run: |
+          set +e
+          output="$(mcp-publisher publish --dry-run 2>&1)"
+          status="$?"
+          set -e
+          printf '%s\n' "$output"
+          if [[ "${status}" -eq 0 ]]; then
+            exit 0
+          fi
+          node -e 'const fs=require("fs"); fs.writeFileSync("out/publish-report-mcp-registry.json", JSON.stringify({channel:"mcp_registry",state:"failed",result:"external_blocker",blocker:"MCP_REGISTRY_EXTERNAL_CONFIGURATION_REQUIRED",package:"",version:"",run_url:process.env.GITHUB_SERVER_URL+"/"+process.env.GITHUB_REPOSITORY+"/actions/runs/"+process.env.GITHUB_RUN_ID,evidence:["mcp-publisher dry-run failed"]}, null, 2)+"\n")'
+          exit "${status}"
       - name: Publish to MCP Registry
         run: |
           set +e
@@ -246,3 +256,4 @@ jobs:
           name: publish-report-${{ github.event.repository.name }}-mcp-registry
           path: out/publish-report-mcp-registry.json
           if-no-files-found: ignore
+
