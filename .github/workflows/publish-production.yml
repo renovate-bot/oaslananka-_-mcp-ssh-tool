@@ -65,15 +65,16 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Install and verify package
         run: |
           set -euo pipefail
-          npm ci
-          npm rebuild better-sqlite3 --if-present
-          npm run build --if-present
-          npm run prepublishOnly --if-present
+          corepack enable && corepack pnpm install --frozen-lockfile
+          corepack pnpm rebuild better-sqlite3 || true
+          corepack pnpm run build --if-present
+          corepack pnpm run prepublishOnly --if-present
           mkdir -p publish-artifact
-          npm pack --pack-destination publish-artifact
+          corepack pnpm pack --pack-destination publish-artifact
           node --input-type=commonjs -e "const p=require('./package.json'); if (!p.name || !p.version) throw new Error('package.json name/version is required'); console.log(p.name + '@' + p.version);"
       - name: Upload package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -102,8 +103,9 @@ jobs:
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Use npm for trusted publishing
-        run: npm install -g npm@11.6.2
+        run: npm --version
       - name: Publish to npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
