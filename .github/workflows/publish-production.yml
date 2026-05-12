@@ -256,4 +256,3 @@ jobs:
           name: publish-report-${{ github.event.repository.name }}-mcp-registry
           path: out/publish-report-mcp-registry.json
           if-no-files-found: ignore
-
