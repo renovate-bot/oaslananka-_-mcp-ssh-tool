@@ -26,8 +26,8 @@ concurrency:
 
 jobs:
   publish:
-    if: ${{ github.repository == 'oaslananka-lab/mcp-ssh-tool' && (inputs.publish == true || github.event_name == 'release') }}
-    runs-on: ubuntu-24.04
+    if: ${{ github.repository == 'oaslananka/mcp-ssh-tool' && (inputs.publish == true || github.event_name == 'release') }}
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     environment: production
     steps:

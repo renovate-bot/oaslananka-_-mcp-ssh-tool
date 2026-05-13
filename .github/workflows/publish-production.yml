@@ -11,10 +11,10 @@ permissions:
   contents: read
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-  NODE_VERSION: '24.15.0'
-  NPM_VERSION: '11.6.2'
-  MCP_PUBLISHER_VERSION: '1.7.9'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  NODE_VERSION: "24.15.0"
+  NPM_VERSION: "11.6.2"
+  MCP_PUBLISHER_VERSION: "1.7.9"
 
 defaults:
   run:
@@ -26,10 +26,10 @@ concurrency:
 
 jobs:
   verify-package:
-    if: ${{ github.repository == 'oaslananka-lab/mcp-ssh-tool' }}
+    if: ${{ github.repository == 'oaslananka/mcp-ssh-tool' }}
     outputs:
       publish_ref: ${{ steps.ref.outputs.value }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     permissions:
       contents: read
@@ -68,7 +68,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
-          cache: ''
+          cache: ""
       - name: Install and verify package
         run: |
           set -euo pipefail
@@ -76,8 +76,8 @@ jobs:
           corepack enable
           corepack install
           corepack pnpm install --frozen-lockfile
-          corepack pnpm run build --if-present
-          corepack pnpm run prepublishOnly --if-present
+          corepack pnpm run --if-present build
+          corepack pnpm run --if-present prepublishOnly
           corepack pnpm pack --pack-destination publish-artifact
           node --input-type=commonjs -e "const p=require('./package.json'); if (!p.name || !p.version) throw new Error('package.json name/version is required'); console.log(p.name + '@' + p.version);"
       - name: Upload package artifact
@@ -88,8 +88,8 @@ jobs:
           if-no-files-found: error
 
   npm-publish:
-    if: ${{ github.repository == 'oaslananka-lab/mcp-ssh-tool' }}
-    runs-on: ubuntu-24.04
+    if: ${{ github.repository == 'oaslananka/mcp-ssh-tool' }}
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     needs: verify-package
     environment: production
@@ -107,7 +107,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
-          cache: ''
+          cache: ""
       - name: Use npm for trusted publishing
         run: npx --yes "npm@${NPM_VERSION}" --version
       - name: Publish to npm
@@ -217,8 +217,8 @@ jobs:
           if-no-files-found: ignore
 
   mcp-registry-publish:
-    if: ${{ github.repository == 'oaslananka-lab/mcp-ssh-tool' }}
-    runs-on: ubuntu-24.04
+    if: ${{ github.repository == 'oaslananka/mcp-ssh-tool' }}
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     environment: production
     needs:
