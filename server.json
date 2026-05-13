@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.oaslananka/mcp-ssh-tool",
+  "name": "io.github.oaslananka-lab/mcp-ssh-tool",
   "title": "SSH MCP Tool",
   "description": "Secure MCP SSH automation server with policy controls, resources, prompts, stdio, and HTTP.",
   "repository": {
