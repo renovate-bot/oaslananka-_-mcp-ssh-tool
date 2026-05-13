@@ -68,25 +68,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
+          cache: ""
       - name: Install and verify package
         run: |
           set -euo pipefail
-          npm install -g "npm@${NPM_VERSION}"
           mkdir -p publish-artifact
-          if [[ -f pnpm-lock.yaml ]]; then
-            corepack enable
-            corepack install
-            corepack pnpm install --frozen-lockfile
-            corepack pnpm run build --if-present
-            corepack pnpm run prepublishOnly --if-present
-            corepack pnpm pack --pack-destination publish-artifact
-          else
-            if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then npm ci; else npm install; fi
-            npm rebuild better-sqlite3 --if-present
-            npm run build --if-present
-            npm run prepublishOnly --if-present
-            npm pack --pack-destination publish-artifact
-          fi
+          corepack enable
+          corepack install
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm run build --if-present
+          corepack pnpm run prepublishOnly --if-present
+          corepack pnpm pack --pack-destination publish-artifact
           node --input-type=commonjs -e "const p=require('./package.json'); if (!p.name || !p.version) throw new Error('package.json name/version is required'); console.log(p.name + '@' + p.version);"
       - name: Upload package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -115,8 +107,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
+          cache: ""
       - name: Use npm for trusted publishing
-        run: npm install -g "npm@${NPM_VERSION}"
+        run: npx --yes "npm@${NPM_VERSION}" --version
       - name: Publish to npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -177,14 +170,14 @@ jobs:
             write_report "failed" "workflow_failure" "NPM_PACKAGE_METADATA_INVALID"
             exit 1
           fi
-          if npm view "${package_name}@${package_version}" version >/dev/null 2>&1; then
+          if npx --yes "npm@${NPM_VERSION}" view "${package_name}@${package_version}" version >/dev/null 2>&1; then
             echo "NPM_PACKAGE_VERSION_ALREADY_PUBLISHED"
             write_report "already_published" "idempotent_noop" ""
             exit 0
           fi
           publish_log="$(mktemp)"
           set +e
-          npm publish "${package_file}" --provenance --access public >"${publish_log}" 2>&1
+          npx --yes "npm@${NPM_VERSION}" publish "${package_file}" --provenance --access public >"${publish_log}" 2>&1
           status="$?"
           set -e
           if [[ "${status}" -ne 0 ]]; then
