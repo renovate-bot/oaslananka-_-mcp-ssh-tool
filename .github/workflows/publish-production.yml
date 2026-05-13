@@ -11,10 +11,10 @@ permissions:
   contents: read
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  NODE_VERSION: "24.15.0"
-  NPM_VERSION: "11.6.2"
-  MCP_PUBLISHER_VERSION: "1.7.9"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  NODE_VERSION: '24.15.0'
+  NPM_VERSION: '11.6.2'
+  MCP_PUBLISHER_VERSION: '1.7.9'
 
 defaults:
   run:
@@ -68,7 +68,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
-          cache: ""
+          cache: ''
       - name: Install and verify package
         run: |
           set -euo pipefail
@@ -107,7 +107,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           registry-url: https://registry.npmjs.org
-          cache: ""
+          cache: ''
       - name: Use npm for trusted publishing
         run: npx --yes "npm@${NPM_VERSION}" --version
       - name: Publish to npm
