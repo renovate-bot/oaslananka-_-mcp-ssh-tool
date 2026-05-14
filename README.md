@@ -1,8 +1,8 @@
 # mcp-ssh-tool
 
 [![npm version](https://img.shields.io/npm/v/mcp-ssh-tool.svg)](https://www.npmjs.com/package/mcp-ssh-tool)
-[![CI](https://github.com/oaslananka-lab/mcp-ssh-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka-lab/mcp-ssh-tool/actions/workflows/ci.yml)
-[![Security](https://github.com/oaslananka-lab/mcp-ssh-tool/actions/workflows/security.yml/badge.svg)](https://github.com/oaslananka-lab/mcp-ssh-tool/actions/workflows/security.yml)
+[![CI](https://github.com/oaslananka/mcp-ssh-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka/mcp-ssh-tool/actions/workflows/ci.yml)
+[![Security](https://github.com/oaslananka/mcp-ssh-tool/actions/workflows/security.yml/badge.svg)](https://github.com/oaslananka/mcp-ssh-tool/actions/workflows/security.yml)
 [![Official MCP Registry](https://img.shields.io/badge/MCP%20Registry-active-green.svg)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.oaslananka%2Fmcp-ssh-tool/versions/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![npm downloads](https://img.shields.io/npm/dm/mcp-ssh-tool.svg)](https://www.npmjs.com/package/mcp-ssh-tool)
@@ -266,7 +266,7 @@ Local quality gates are layered:
 
 ## CI/CD Ownership
 
-The personal repository `https://github.com/oaslananka/mcp-ssh-tool` is the source repository. The organization repository `https://github.com/oaslananka-lab/mcp-ssh-tool` is the GitHub Actions, CI/CD, release, security, and provenance boundary.
+The personal repository `https://github.com/oaslananka/mcp-ssh-tool` is the source repository. The organization repository `https://github.com/oaslananka/mcp-ssh-tool` is the GitHub Actions, CI/CD, release, security, and provenance boundary.
 
 Automatic CI/CD, supply-chain security checks, trusted npm publishing, MCP Registry publishing, GitHub Releases, Docker image validation, SBOMs, attestations, and release decisions run only from the org repository. Personal-repo Actions are intentionally not required gates.
 
